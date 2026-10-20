@@ -78,20 +78,24 @@ func names(ps []Place) []string {
 func TestCandidatesEmbeddedListOrderAndCopy(t *testing.T) {
 	s := newService(t, offline())
 	c := s.Candidates()
-	if len(c) != 30 {
-		t.Fatalf("got %d candidates, want 30", len(c))
+	if len(c) == 0 {
+		t.Fatal("no embedded candidates")
 	}
-	if c[0] != (Place{Name: "Eiffel Tower, Paris", Lat: 48.8584, Lon: 2.2945, Group: "Global"}) {
-		t.Fatalf("first candidate = %+v", c[0])
-	}
-	last := c[len(c)-1]
-	if last != (Place{Name: "Gedung Sate, Bandung", Lat: -6.9025, Lon: 107.6186, Group: "Indonesia"}) {
-		t.Fatalf("last candidate = %+v", last)
+	seen := map[string]bool{}
+	for _, p := range c {
+		if p.Name == "" || p.Group == "" || math.Abs(p.Lat) > 90 || math.Abs(p.Lon) > 180 || (p.Lat == 0 && p.Lon == 0) {
+			t.Errorf("invalid candidate %+v", p)
+		}
+		if seen[p.Name] {
+			t.Errorf("duplicate candidate %q", p.Name)
+		}
+		seen[p.Name] = true
 	}
 
 	// The returned slice is a copy: mutating it must not change the service.
+	first := c[0].Name
 	c[0].Name = "changed"
-	if s.Candidates()[0].Name != "Eiffel Tower, Paris" {
+	if s.Candidates()[0].Name != first {
 		t.Fatal("Candidates returned a shared slice")
 	}
 }

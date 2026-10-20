@@ -15,8 +15,12 @@ import { EffectStack } from './effects.js';
 import { landmarksFor } from './landmarks.js';
 import { makeSurfaces } from './surfaces.js';
 import { viewDepthRange } from './camera-fit.js';
+import { composeContext } from './context.js';
+import { clipTriangle, clipSegment, drapeTriangle, groundGridHeight } from './surface-geometry.js';
 
 const DEG = Math.PI / 180;
+// One number per millimetre position, for Map keys on hot per-vertex paths (no string allocation).
+const gridKey = (x, y) => (Math.round(x * 1000) + 1e7) * 2e7 + Math.round(y * 1000) + 1e7;
 const UP = [0, 1, 0];
 const GROUP_NAMES = ['buildings', 'roads', 'ground', 'water', 'green', 'trees', 'details', 'people', 'surroundings'];
 
@@ -1593,7 +1597,10 @@ export class CityRenderer {
     if (position) this.camera.position.copy(position);
     if (yaw !== undefined) this.camera.userData.yaw = yaw;
     if (pitch !== undefined) this.camera.userData.pitch = pitch;
-    this._viewDistance = Number.isFinite(distance) ? distance : 0;
+    // Depth planes follow the eye's real distance to the scene. The orbit distance is not that once
+    // the target is panned off the scene, and a near plane sized from it would clip close geometry.
+    this._viewDistance = this._sceneCenter ? this.camera.position.distanceTo(this._sceneCenter)
+      : Number.isFinite(distance) ? distance : 0;
     this._updateDepthRange();
   }
 
@@ -1616,7 +1623,8 @@ export class CityRenderer {
 
   /** Keep the framed scene inside the far plane and ahead of the fog, including tall landmarks. */
   _updateDepthRange() {
-    const { far, fogNear, fogFar } = viewDepthRange(this._viewDistance, this._sceneRadius, this.options.detailDistance ?? 1);
+    const { near, far, fogNear, fogFar } = viewDepthRange(this._viewDistance, this._sceneRadius, this.options.detailDistance ?? 1);
+    this.camera.near = near;
     this.camera.far = far;
     this._fogFar = fogFar;
     this._fogNear = fogNear;
@@ -1672,7 +1680,27 @@ export class CityRenderer {
 
   _terrainHeight(x, y) {
     if (!this.options.terrain || !this._elev) return 0;
-    return sampleHeight(this._elev, x, y);
+    const nearSize=this._city?.size || this._elev.size;
+    const size=this._surr && Math.max(Math.abs(x),Math.abs(y))>nearSize/2 ? this._surr.farSize || this._elev.size : nearSize;
+    const segments=Math.max(8,Math.min(128,this._elev.n-1));
+    return groundGridHeight(x,y,size,segments,(px,py)=>this._cornerHeight(px,py));
+  }
+
+  /** Elevation at a ground-grid corner. Corners are shared by many queries, so memoise them. */
+  _cornerHeight(px, py) {
+    const key = gridKey(px, py);
+    this._terrainSamples ??= new Map();
+    let h = this._terrainSamples.get(key);
+    if (h === undefined) this._terrainSamples.set(key, h = sampleHeight(this._elev, px, py));
+    return h;
+  }
+
+  /** Ground height (with water carved in) at a grid corner, memoised for the current build. */
+  _groundCorner(x, y) {
+    const key = gridKey(x, y);
+    let h = this._groundSamples.get(key);
+    if (h === undefined) this._groundSamples.set(key, h = this.groundHeight(x, y));
+    return h;
   }
 
   /** Top walkable surface for pin placement; ordinary terrain remains below a bridge. */
@@ -1684,7 +1712,7 @@ export class CityRenderer {
   nearBounds() {
     const box = new THREE.Box3();
     for (const { mesh } of this._meshes) {
-      if (mesh.userData.surroundings || !['ground', 'walls', 'roofs', 'asphalt', 'footways'].includes(mesh.name)) continue;
+      if (mesh.userData.surroundings || !['ground', 'walls', 'roofs', 'asphalt', 'footways', 'mapped-objects'].includes(mesh.name)) continue;
       mesh.geometry.computeBoundingBox();
       box.union(mesh.geometry.boundingBox);
     }
@@ -1793,12 +1821,27 @@ export class CityRenderer {
   }
 
   /** Flat polygon (with holes) lying on the ground. */
-  _flatPoly(batch, outer, holes, yOff, col, outline = false, heightAt = null) {
+  _flatPoly(batch, outer, holes, yOff, col, outline = false, heightAt = null, bounds = { half: this._landHalf, exclude: 0 }) {
     const { pts, tris } = triangulate(outer, holes);
     const H = heightAt || ((x, y) => this.groundHeight(x, y));
-    const V = (p) => [p.x, H(p.x, p.y) + yOff, -p.y];
+    const V = (p) => [p[0], H(p[0], p[1]) + yOff, -p[1]];
     for (const t of tris) {
-      batch.tri(V(pts[t[0]]), V(pts[t[1]]), V(pts[t[2]]), UP, col);
+      const triangle = t.map(i => [pts[i].x, pts[i].y]);
+      for (const clipped of clipTriangle(triangle, bounds.half, bounds.exclude)) {
+        if (heightAt || !this.options.terrain || !this._elev) {
+          batch.tri(V(clipped[0]),V(clipped[1]),V(clipped[2]),UP,col);
+          continue;
+        }
+        const seg=Math.max(8,Math.min(128,this._elev.n-1)), nearSize=this._city.size;
+        const regions=[{size:nearSize,exclude:0}];
+        if(this._surr)regions.push({size:this._surr.farSize || this._elev.size,exclude:nearSize/2});
+        for(const region of regions)for(const part of clipTriangle(clipped,region.size/2,region.exclude)) {
+          for(const piece of drapeTriangle(part,region.size,seg,(x,y)=>this._groundCorner(x,y))) {
+            const point=p=>[p[0],p[2]+yOff,-p[1]];
+            batch.tri(point(piece[0]),point(piece[1]),point(piece[2]),UP,col);
+          }
+        }
+      }
     }
     if (outline) {
       const rings = [outer, ...(holes || [])];
@@ -1807,9 +1850,9 @@ export class CityRenderer {
         for (let i = 0; i < ring.length; i++) {
           const p = ring[i];
           const q = ring[(i + 1) % ring.length];
-          const a = [p[0], H(p[0], p[1]) + yOff + 0.01, -p[1]];
-          const b = [q[0], H(q[0], q[1]) + yOff + 0.01, -q[1]];
-          this._pushSeg(a, b);
+          for (const [a,b] of clipSegment(p,q,bounds.half,bounds.exclude)) {
+            this._pushSeg([a[0],H(...a)+yOff+0.01,-a[1]],[b[0],H(...b)+yOff+0.01,-b[1]]);
+          }
         }
       }
     }
@@ -1819,6 +1862,69 @@ export class CityRenderer {
   _mergeList(list) {
     if (!list.length) return null;
     return mergeGeometries(list, false);
+  }
+
+  // OSM supplies a location and sometimes a footprint/height, but no sculpted mesh.
+  // Use restrained abstract proxies rather than inventing a specific statue or artwork.
+  _buildMappedObjects(objects, replacements = []) {
+    const lists = [[], []], buildingIDs = new Set([
+      ...(this._city.buildings || []), ...(this._surr?.buildings || []),
+    ].filter(b => b.height > 0).map(b => b.id));
+    const selected = (objects || []).filter(p => {
+      const [x,y] = p.position || [];
+      return Number.isFinite(x) && Number.isFinite(y) && Math.abs(x) <= this._landHalf && Math.abs(y) <= this._landHalf
+        && !buildingIDs.has(p.id) && !replacements.some(([cx,cy]) => Math.hypot(x-cx,y-cy) < 25);
+    }).sort((a,b) => Math.hypot(...a.position)-Math.hypot(...b.position) || String(a.id).localeCompare(String(b.id))).slice(0,512);
+    this.mappedObjectCount = selected.length;
+    for (const p of selected) {
+      const [x,y] = p.position, h = Math.max(0.1, Number(p.height) || 4);
+      const list = lists[Math.max(Math.abs(x),Math.abs(y)) > this._city.size * 0.6 ? 1 : 0];
+      const bronze = /bronze|copper/.test(p.material || '');
+      const color = colArr(bronze ? '#6b796c' : '#a4a099');
+      const base = this.groundHeight(x,y), plinth = Math.min(1, h * 0.2), width = Math.min(5,Math.max(0.7,h*0.24));
+      const add = (geo, height, col = color) => {
+        geo.translate(x,base+height,-y);
+        const batchable = toBatchable(geo,col);
+        if (batchable !== geo) geo.dispose();
+        list.push(batchable);
+      };
+      if (p.kind === 'fountain') {
+        // A polygon fountain already has its mapped basin drawn as water.
+        if (!p.outer?.length) {
+          add(new THREE.CylinderGeometry(width,width,0.3,16),0.15);
+          add(new THREE.CircleGeometry(width*0.86,16).rotateX(-Math.PI/2),0.31,colArr(PAL.water));
+        }
+        continue;
+      }
+      const foot = new Batch();
+      const outer = p.outer?.length >= 3 ? p.outer : [[x-width/2,y-width/2],[x+width/2,y-width/2],[x+width/2,y+width/2],[x-width/2,y+width/2]];
+      if (outer.every(p => Math.max(Math.abs(p[0]),Math.abs(p[1])) <= this._landHalf)) {
+        addWalls(foot,outer,[],base,base+plinth,color); addCap(foot,outer,[],base+plinth,color);
+      } else {
+        const {pts,tris}=triangulate(outer,[]),sign=signedArea(outer)>=0?1:-1;
+        for(const t of tris)for(const piece of clipTriangle(t.map(i=>[pts[i].x,pts[i].y]),this._landHalf)) {
+          const point=p=>[p[0],base+plinth,-p[1]];
+          foot.tri(point(piece[0]),point(piece[1]),point(piece[2]),UP,color);
+        }
+        for(let i=0;i<outer.length;i++)for(const [a,b]of clipSegment(outer[i],outer[(i+1)%outer.length],this._landHalf)) {
+          foot.quad([a[0],base,-a[1]],[b[0],base,-b[1]],[b[0],base+plinth,-b[1]],[a[0],base+plinth,-a[1]],[sign*(b[1]-a[1]),0,sign*(b[0]-a[0])],color);
+        }
+      }
+      list.push(foot.toGeometry());
+      if (p.kind === 'statue') {
+        add(new THREE.IcosahedronGeometry(1,0).scale(width*0.38,(h-plinth)/2,width*0.38),plinth+(h-plinth)/2);
+      } else if (p.kind === 'monument') {
+        add(new THREE.CylinderGeometry(width*0.16,width*0.32,h-plinth,8),plinth+(h-plinth)/2);
+      } else {
+        add(new THREE.BoxGeometry(width*0.75,h-plinth,width*0.3),plinth+(h-plinth)/2);
+      }
+    }
+    lists.forEach((list,i) => {
+      const geometry = this._mergeList(list);
+      for (const geo of list) geo.dispose();
+      const mesh = this._addMesh(geometry,'detail',i ? 'surroundings' : 'buildings',{name:'mapped-objects',pickable:!i});
+      if (mesh && i) mesh.userData.surroundings = true;
+    });
   }
 
   // ----- buildings ------------------------------------------------------------
@@ -1952,7 +2058,7 @@ export class CityRenderer {
    * Roads (asphalt ribbons), sidewalks under them, footways, and optional details:
    * dashed centre lanes, zebra crosswalks at junctions, utility poles, traffic signals.
    */
-  _buildRoads(roads, details, japan = false) {
+  _buildRoads(roads, details, japan = false, context = false) {
     const asphalt = new Batch();
     const sidewalks = new Batch();
     const walk = new Batch();
@@ -1974,7 +2080,7 @@ export class CityRenderer {
       const major = MAJOR_KINDS.has(kind);
       const w = r.width || (foot ? 2 : 6);
       const path = resamplePolyline(pts, 4);
-      const heightAt = (x, y) => this._surfaces.heightFor(r, x, y);
+      const heightAt = (x, y) => this._surfaces.heightFor(r.sourceRoad || r, x, y);
       entries.push({ pts, kind, foot, major, w, lanes: r.lanes || 0, bridge: r.bridge, layer: r.layer || 0, heightAt });
 
       if (foot) {
@@ -1982,7 +2088,7 @@ export class CityRenderer {
         continue;
       }
       // sidewalk strip underneath the carriageway
-      this._ribbon(sidewalks, path, w + 5, 0.04, colArr(PAL.sidewalk), false, heightAt);
+      if (!context) this._ribbon(sidewalks, path, w + 5, 0.04, colArr(PAL.sidewalk), false, heightAt);
       this._ribbon(asphalt, path, w, 0.07, colArr(major ? PAL.road : PAL.roadMinor), true, heightAt);
     }
 
@@ -2215,30 +2321,31 @@ export class CityRenderer {
   _buildRailways(railways) {
     const b = new Batch();
     for (const rw of railways || []) {
-      if (!rw.points || rw.points.length < 2) continue;
+      if (!rw.points || rw.points.length < 2 || rw.tunnel || rw.kind === 'subway') continue;
       const path = resamplePolyline(rw.points, 4);
-      this._ribbon(b, path, 2.4, 0.08, colArr(PAL.rail), true);
+      this._ribbon(b, path, 2.4, 0.08, colArr(PAL.rail), true, (x,y) => this._surfaces.heightFor(rw.sourceRoad || rw,x,y));
     }
     return b.toGeometry();
   }
 
-  /** Flat area layers: water (+0.05), green (+0.08), plazas / parking (+0.06). */
-  _buildAreas(water, green, areas) {
+  /** Keep paths and paving above park/grass layers. */
+  _buildAreas(water, green, areas, bounds) {
     const wb = new Batch();
     const gb = new Batch();
     const ab = new Batch();
     for (const a of water || []) {
-      if (a.outer && a.outer.length >= 3) this._flatPoly(wb, a.outer, a.holes, 0, colArr(PAL.water), true, () => this._surfaces.water.get(a));
+      if (a.outer && a.outer.length >= 3) this._flatPoly(wb, a.outer, a.holes, 0, colArr(PAL.water), true, () => this._surfaces.water.get(a), bounds);
     }
     for (const a of green || []) {
       if (!a.outer || a.outer.length < 3) continue;
       const hex = a.kind === 'forest' || a.kind === 'wood' ? '#7fae6b' : PAL.green;
-      this._flatPoly(gb, a.outer, a.holes, 0.08, colArr(hex), true);
+      const layer = ['park','recreation_ground'].includes(a.kind) ? 0.012 : ['forest','wood','orchard'].includes(a.kind) ? 0.032 : 0.022;
+      this._flatPoly(gb, a.outer, a.holes, layer, colArr(hex), true, null, bounds);
     }
     for (const a of areas || []) {
       if (!a.outer || a.outer.length < 3) continue;
       const hex = a.kind === 'parking' ? PAL.parking : PAL.area;
-      this._flatPoly(ab, a.outer, a.holes, 0.06, colArr(hex), true);
+      this._flatPoly(ab, a.outer, a.holes, 0.04, colArr(hex), true, null, bounds);
     }
     return [
       { geo: wb.toGeometry(), role: 'water', name: 'water', group: 'water' },
@@ -2399,9 +2506,9 @@ export class CityRenderer {
    * options.treeType picks the species mix, options.treeSize scales them. Round crowns (broadleaf and
    * columnar) use the detail distance LOD; in winter they become bare branches, conifers and palms stay green.
    */
-  _buildTrees(trees) {
+  _buildTrees(trees, surroundings = false) {
     const opt = this.options;
-    this._treeLOD = []; // crown / far-crown pairs for the picture distance
+    const firstMesh = this._meshes.length;
     const season = Object.prototype.hasOwnProperty.call(SEASON_CROWN, opt.season) ? opt.season : 'summer';
     const palette = SEASON_CROWN[season];
     // trunks: tone -> always visible, tone-noline -> colour pass only, lines -> edge pass only
@@ -2413,7 +2520,7 @@ export class CityRenderer {
     let pool = trees || [];
     if (dens < 1) pool = pool.filter((_, i) => rng(hashStr(`treethin:${i}`))() < dens);
     const pts = pool.filter((t) => this._clearOf(t[0], t[1], 4.5) && this._surfaces.waterHeightAt(t[0], t[1]) === null);
-    if (dens > 1) pts.push(...this._streetTrees((dens - 1) / 2));
+    if (dens > 1 && !surroundings) pts.push(...this._streetTrees((dens - 1) / 2));
     pts.length = Math.min(pts.length, 40000);
     const n = pts.length;
     if (!n) return;
@@ -2635,6 +2742,7 @@ export class CityRenderer {
       });
     }
     this._updateTreeLOD(true);
+    if (surroundings) for (const { mesh } of this._meshes.slice(firstMesh)) mesh.userData.surroundings = true;
   }
 
   /** Extra trees along the sidewalks of drivable roads: one candidate per side every 8 m, kept with probability `share` (0..1). */
@@ -3237,7 +3345,7 @@ export class CityRenderer {
   // ----- build orchestration ----------------------------------------------------
 
   /**
-   * (Re)build all city meshes from cityData (+ elevation grid, + surroundings {buildings}).
+   * (Re)build city meshes, elevation, and mapped surroundings.
    * Disposes previous meshes first.
    */
   /** True when local (x, y) is at least r meters from every camera keep-clear point (cityData.keepClear). */
@@ -3259,9 +3367,16 @@ export class CityRenderer {
     this._disposeMeshes();
     const city = this._city;
     if (!city) return;
-    if (this._surfaceCity !== city || this._surfaceElevation !== this._elev || this._surfaceTerrain !== this.options.terrain) {
-      this._surfaces = makeSurfaces(city, this.options.terrain ? this._elev : null, (x, y) => this._terrainHeight(x, y));
-      this._surfaceCity = city; this._surfaceElevation = this._elev; this._surfaceTerrain = this.options.terrain;
+    this._terrainSamples = new Map();
+    if (this._contextCity !== city || this._contextSurroundings !== this._surr) {
+      this._context = composeContext(city, this._surr);
+      this._contextCity = city; this._contextSurroundings = this._surr;
+    }
+    const context = this._context;
+    this._landHalf = Math.max(city.size, this._surr?.contextSize || 0) / 2;
+    if (this._surfaceCity !== context || this._surfaceElevation !== this._elev || this._surfaceTerrain !== this.options.terrain) {
+      this._surfaces = makeSurfaces(context, this.options.terrain ? this._elev : null, (x, y) => this._terrainHeight(x, y));
+      this._surfaceCity = context; this._surfaceElevation = this._elev; this._surfaceTerrain = this.options.terrain;
     }
     const opt = this.options;
     const size = city.size || 1000;
@@ -3270,6 +3385,7 @@ export class CityRenderer {
     this.setLight(this.light);
     this._segs = [];
     this._lampPts = [];
+    this._groundSamples = new Map();
 
     // ground (inner, terrain-following) and surroundings ground
     this._addMesh(this._buildGround(size, opt.terrain), 'ground', 'ground', {
@@ -3293,10 +3409,22 @@ export class CityRenderer {
     const rail = this._buildRailways(city.railways || []);
     if (rail) this._addMesh(rail, 'rail', 'roads', { name: 'railways' });
 
+    for (const part of this._buildRoads(context.contextRoads, false, false, true)) {
+      const mesh = this._addMesh(part.geo, part.role, 'surroundings', { name: `context-${part.name}`, cast: false });
+      if (mesh) mesh.userData.surroundings = true;
+    }
+    const contextRail = this._buildRailways(context.contextRailways);
+    if (contextRail) this._addMesh(contextRail,'rail','surroundings',{name:'context-railways',cast:false}).userData.surroundings = true;
+
     // water / green / plazas
-    for (const part of this._buildAreas(city.water, city.green, city.areas)) {
+    const innerHalf = this._surr ? city.size * 0.6 : city.size / 2;
+    for (const part of this._buildAreas(context.water, context.green, context.areas, { half: innerHalf, exclude: 0 })) {
       if (!part.geo) continue;
       this._addMesh(part.geo, part.role, part.group, { name: part.name });
+    }
+    if (this._surr && this._landHalf > innerHalf) for (const part of this._buildAreas(context.water,context.green,context.areas,{half:this._landHalf,exclude:innerHalf})) {
+      const mesh = this._addMesh(part.geo,part.role,'surroundings',{name:`context-${part.name}`,cast:false});
+      if (mesh) mesh.userData.surroundings = true;
     }
 
     // buildings: walls and roofs as two merged meshes
@@ -3307,12 +3435,19 @@ export class CityRenderer {
 
     // surroundings: simple extruded footprints, lower detail
     if (this._surr && this._surr.buildings && this._surr.buildings.length) {
-      const sb = this._buildBuildings(this._surr.buildings, true);
+      const sb = this._buildBuildings(context.contextBuildings, true);
       if (sb.walls) this._addMesh(sb.walls, 'surr', 'surroundings', { name: 'surr-walls' }).userData.surroundings = true;
       if (sb.roofs) this._addMesh(sb.roofs, 'surr', 'surroundings', { name: 'surr-roofs' }).userData.surroundings = true;
     }
 
-    if (opt.trees) this._buildTrees(city.trees || []);
+    this._buildMappedObjects(context.props, lm.replacements);
+    this._treeLOD = [];
+    if (opt.trees) {
+      const near = [], far = [];
+      for (const p of context.trees) (Math.max(Math.abs(p[0]),Math.abs(p[1])) <= city.size*0.6 ? near : far).push(p);
+      this._buildTrees(near);
+      this._buildTrees(far,true);
+    }
     this._buildCrowd(city.roads || []);
 
     // edges of buildings for SVG export / feature lines (world space)
@@ -3327,6 +3462,8 @@ export class CityRenderer {
     this._updateShadowFlags();
     const bounds = this.nearBounds();
     this._sceneRadius = Math.hypot(...bounds.min.map((v, i) => bounds.max[i] - v)) / 2;
+    this._sceneCenter = new THREE.Vector3(...bounds.min.map((v, i) => (v + bounds.max[i]) / 2));
+    this._viewDistance = this.camera.position.distanceTo(this._sceneCenter);
     this._updateDepthRange();
     this._syncLamps();
   }
@@ -4123,7 +4260,7 @@ export class CityRenderer {
 // Module-level geometry helpers (used by CityRenderer)
 // ---------------------------------------------------------------------------
 
-const FOOT_KINDS = new Set(['footway', 'path', 'cycleway', 'steps', 'pedestrian', 'bridleway', 'corridor']);
+export const FOOT_KINDS = new Set(['footway', 'path', 'cycleway', 'steps', 'pedestrian', 'bridleway', 'corridor']);
 const MAJOR_KINDS = new Set([
   'motorway', 'motorway_link', 'trunk', 'trunk_link', 'primary', 'primary_link',
   'secondary', 'secondary_link', 'tertiary', 'tertiary_link',

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -68,6 +69,9 @@ type collected struct {
 	green    []Area
 	areas    []Area
 	trees    []geo.Point
+	props    []MappedObject
+	areaSeen map[string]bool
+	propSeen map[string]bool
 }
 
 // Parse turns a raw Overpass JSON response for the size x size square centred on (lat, lon) into
@@ -80,6 +84,7 @@ func Parse(raw []byte, lat, lon float64, size int, seed int) (*CityData, error) 
 	half := float64(size) / 2 * pad
 	pbox := box{minX: -half, minY: -half, maxX: half, maxY: half}
 	c := collect(resp.Elements, lat, lon, pbox)
+	sort.SliceStable(c.props, func(i, j int) bool { return c.props[i].ID < c.props[j].ID })
 
 	items := resolveBuildings(c.outlines, c.parts)
 	buildings := make([]Building, 0, len(items))
@@ -105,6 +110,7 @@ func Parse(raw []byte, lat, lon float64, size int, seed int) (*CityData, error) 
 		Green:     c.green,
 		Areas:     c.areas,
 		Trees:     trees,
+		Props:     c.props,
 	}
 	city.Viewpoints = FindViewpoints(city)
 	city.Stats = Stats{
@@ -118,8 +124,9 @@ func Parse(raw []byte, lat, lon float64, size int, seed int) (*CityData, error) 
 	return city, nil
 }
 
-// ParseSurroundings returns the building footprints of the farSize square that lie outside the
-// inner size square (judged by centroid), simplified with Douglas-Peucker.
+// ParseSurroundings returns building footprints from the farSize square outside the inner size
+// square (judged by centroid), plus mapped context features from at most a 2 km square. Building
+// footprints are simplified with Douglas-Peucker; context roads are clipped to the context box.
 func ParseSurroundings(raw []byte, lat, lon float64, size, farSize int) (*Surroundings, error) {
 	var resp overpassResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
@@ -128,6 +135,9 @@ func ParseSurroundings(raw []byte, lat, lon float64, size, farSize int) (*Surrou
 	half := float64(farSize) / 2 * pad
 	pbox := box{minX: -half, minY: -half, maxX: half, maxY: half}
 	c := collect(resp.Elements, lat, lon, pbox)
+	contextSize := contextSizeFor(farSize)
+	contextHalf := float64(contextSize) / 2
+	contextBox := box{minX: -contextHalf, minY: -contextHalf, maxX: contextHalf, maxY: contextHalf}
 
 	items := resolveBuildings(c.outlines, c.parts)
 	inner := float64(size) / 2
@@ -143,7 +153,23 @@ func ParseSurroundings(raw []byte, lat, lon float64, size, farSize int) (*Surrou
 		}
 		buildings = append(buildings, makeBuilding(it, 0))
 	}
-	return &Surroundings{Buildings: buildings}, nil
+	roads, railways := contextLines(c.roads, c.railways, contextBox)
+	water := contextAreas(c.water, contextBox)
+	green := contextAreas(c.green, contextBox)
+	areas := contextAreas(c.areas, contextBox)
+	props := contextProps(c.props, contextBox)
+	trees := contextTrees(c.trees, contextBox, 4000)
+	return &Surroundings{
+		Buildings:   buildings,
+		Roads:       roads,
+		Railways:    railways,
+		Water:       water,
+		Green:       green,
+		Areas:       areas,
+		Trees:       trees,
+		Props:       props,
+		ContextSize: contextSize,
+	}, nil
 }
 
 // collect walks the element list once and buckets every usable feature.
@@ -152,6 +178,7 @@ func collect(elements []osmElement, lat0, lon0 float64, b box) *collected {
 		outlines: []rawBuilding{}, parts: []rawBuilding{},
 		roads: []Road{}, railways: []Railway{},
 		water: []Area{}, green: []Area{}, areas: []Area{}, trees: []geo.Point{},
+		props: []MappedObject{}, areaSeen: map[string]bool{}, propSeen: map[string]bool{},
 	}
 	toXY := func(g []osmLatLon) []geo.Point {
 		pts := make([]geo.Point, len(g))
@@ -165,11 +192,12 @@ func collect(elements []osmElement, lat0, lon0 float64, b box) *collected {
 		tags := el.Tags
 
 		if el.Type == "node" {
-			if tags["natural"] == "tree" {
-				p := geo.ToLocal(el.Lat, el.Lon, lat0, lon0)
-				if b.contains(p) {
-					out.trees = append(out.trees, p)
-				}
+			p := geo.ToLocal(el.Lat, el.Lon, lat0, lon0)
+			if tags["natural"] == "tree" && b.contains(p) {
+				out.trees = append(out.trees, p)
+			}
+			if propKind(tags) != "" && b.contains(p) {
+				addProp(out, mappedObject("n"+strconv.FormatInt(el.ID, 10), tags, p, nil))
 			}
 			continue
 		}
@@ -180,11 +208,28 @@ func collect(elements []osmElement, lat0, lon0 float64, b box) *collected {
 			}
 			closed := isClosedGeom(el.Geometry)
 			cat := categorizeWay(tags, closed)
-			if cat == "" {
+			if cat == "" && propKind(tags) == "" {
 				continue
 			}
 			pts := toXY(el.Geometry)
 			id := "w" + strconv.FormatInt(el.ID, 10)
+			if propKind(tags) != "" && intersectsBox(pts, closed, b) {
+				var outer []geo.Point
+				if closed {
+					outer = cleanRing(pts)
+					if outer != nil {
+						outer = orient(outer, true)
+					}
+				}
+				position := centroid(pts)
+				if outer != nil {
+					position = centroid(outer)
+				}
+				addProp(out, mappedObject(id, tags, position, outer))
+			}
+			if cat == "" {
+				continue
+			}
 
 			switch cat {
 			case "building", "part":
@@ -223,7 +268,10 @@ func collect(elements []osmElement, lat0, lon0 float64, b box) *collected {
 					if len(pieces) > 1 {
 						pid = fmt.Sprintf("%s_%d", id, k)
 					}
-					out.railways = append(out.railways, Railway{ID: pid, Points: piece, Kind: tags["railway"]})
+					out.railways = append(out.railways, Railway{
+						ID: pid, Points: piece, Kind: tags["railway"], Name: tags["name"],
+						Bridge: isYes(tags, "bridge"), Tunnel: isYes(tags, "tunnel"), Layer: parseLayer(tags),
+					})
 				}
 			case "treerow":
 				line := cleanLine(pts)
@@ -241,7 +289,7 @@ func collect(elements []osmElement, lat0, lon0 float64, b box) *collected {
 				if ring == nil || !intersectsBox(ring, true, b) {
 					continue
 				}
-				area := Area{Outer: orient(ring, true), Holes: [][]geo.Point{}, Kind: areaKind(cat, tags)}
+				area := Area{ID: id, Outer: orient(ring, true), Holes: [][]geo.Point{}, Kind: areaKind(cat, tags)}
 				pushArea(out, cat, area)
 			}
 			continue
@@ -249,10 +297,21 @@ func collect(elements []osmElement, lat0, lon0 float64, b box) *collected {
 
 		if el.Type == "relation" {
 			cat := categorizeRelation(tags)
-			if cat == "" {
+			if cat == "" && propKind(tags) == "" {
 				continue
 			}
 			polys := polysFromMembers(el.Members, lat0, lon0)
+			if propKind(tags) != "" {
+				for _, poly := range polys {
+					if intersectsBox(poly.outer, true, b) {
+						addProp(out, mappedObject("r"+strconv.FormatInt(el.ID, 10), tags, centroid(poly.outer), poly.outer))
+						break
+					}
+				}
+			}
+			if cat == "" {
+				continue
+			}
 			for k, poly := range polys {
 				if !intersectsBox(poly.outer, true, b) {
 					continue
@@ -269,7 +328,7 @@ func collect(elements []osmElement, lat0, lon0 float64, b box) *collected {
 						out.outlines = append(out.outlines, item)
 					}
 				} else {
-					pushArea(out, cat, Area{Outer: poly.outer, Holes: poly.holes, Kind: areaKind(cat, tags)})
+					pushArea(out, cat, Area{ID: id, Outer: poly.outer, Holes: poly.holes, Kind: areaKind(cat, tags)})
 				}
 			}
 		}
@@ -305,6 +364,9 @@ func waterKind(tags tagMap) string {
 	}
 	if tags["landuse"] == "reservoir" {
 		return "reservoir"
+	}
+	if tags["amenity"] == "fountain" {
+		return "fountain"
 	}
 	return ""
 }
@@ -378,6 +440,12 @@ func areaKind(cat string, tags tagMap) string {
 }
 
 func pushArea(out *collected, cat string, a Area) {
+	if a.ID != "" && out.areaSeen[a.ID] {
+		return
+	}
+	if a.ID != "" {
+		out.areaSeen[a.ID] = true
+	}
 	switch cat {
 	case "water":
 		out.water = append(out.water, a)
@@ -386,6 +454,13 @@ func pushArea(out *collected, cat string, a Area) {
 	default: // plaza, parking
 		out.areas = append(out.areas, a)
 	}
+}
+
+func parseLayer(tags tagMap) int {
+	if layer, ok := parseNumber(tags["layer"]); ok {
+		return int(math.Trunc(layer))
+	}
+	return 0
 }
 
 func makeRoad(id string, tags tagMap, points []geo.Point) Road {

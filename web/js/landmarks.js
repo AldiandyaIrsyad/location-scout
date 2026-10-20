@@ -330,6 +330,7 @@ export function landmarksFor(city, enabled = true) {
   }
   if (!found.length) return { buildings: list, draw: null };
   return {
+    replacements: found.map(({ cx, cy }) => [cx, cy]),
     buildings: list.filter((b) => !drop.has(b)).map((b) => (plain && plain.has(b) ? { ...b, noWindows: true } : b)),
     draw(batch, groundHeight) {
       for (const { lm, cx, cy, yaw, hx, hy } of found) {

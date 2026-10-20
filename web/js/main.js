@@ -1,6 +1,6 @@
 // Panelscape — app wiring: UI state, URL hash, build pipeline, camera, map, export.
 import * as THREE from 'three';
-import { CityRenderer } from './render.js';
+import { CityRenderer, FOOT_KINDS } from './render.js';
 import { CameraRig } from './controls.js';
 import { MiniMap } from './map.js';
 import { toLocal, toLatLon } from './geo.js';
@@ -78,11 +78,16 @@ const minimap = new MiniMap($('map'), {
   },
 });
 
+// The pose the last framing preset produced. A resize re-frames only while the camera is still
+// exactly there; wheel zoom, WASD and panning all move it off, and the view must stay as the user left it.
+let presetPose = null;
+const poseKey = () => [rig.distance, rig.yaw, rig.pitch, rig.target.x, rig.target.y, rig.target.z].join();
+
 function resize() {
   const r = canvas.parentElement.getBoundingClientRect();
   renderer.resize(Math.max(1, r.width), Math.max(1, r.height));
   const preset = $('cameraSelect')?.value;
-  if (state.city && ['overview', 'top', 'wide'].includes(preset)) applyPreset(preset);
+  if (state.city && presetPose === poseKey() && ['overview', 'top', 'wide'].includes(preset)) applyPreset(preset);
   renderer.applyCameraPose(rig.getPose());
   updateMapCamera();
   requestRender();
@@ -235,10 +240,13 @@ async function build() {
         renderer.applyCameraPose(rig.getPose());
         showStats();
         requestRender();
+        setStatusT('status.built', { name: state.name || t('status.area'), secs: ((performance.now() - t0) / 1000).toFixed(1) });
       } catch (err) {
-        if (err.name !== 'AbortError') console.warn('Surroundings failed', err);
+        if (err.name !== 'AbortError') {
+          console.warn('Surroundings failed', err);
+          if (token === state.buildToken) setStatusT('status.surFailed', { name: state.name || t('status.area'), secs });
+        }
       }
-      if (token === state.buildToken) setStatusT('status.built', { name: state.name || t('status.area'), secs: ((performance.now() - t0) / 1000).toFixed(1) });
     }
   } catch (err) {
     if (err.name === 'AbortError' || token !== state.buildToken) return;
@@ -281,12 +289,18 @@ function showStats() {
   const parts = [
     t('stats.buildings', { n: s.buildings ?? c.buildings.length, g: s.guessed ?? c.buildings.filter((b) => b.guessed).length }),
     t('stats.roads', { n: s.roads ?? c.roads.length }),
-    t('stats.trees', { n: s.trees ?? c.trees.length }),
+    t('stats.trees', { n: new Set([...c.trees,...(state.surroundings?.trees || [])].map(p=>`${Math.round(p[0]*10)},${Math.round(p[1]*10)}`)).size }),
   ];
   if (state.elevation) parts.push(t('stats.elevation', { m: Math.round(state.elevation.baseElevation) }) + (state.elevation.source ? ` (${state.elevation.source})` : ''));
   if (s.bytes) parts.push(t('stats.mapData', { kb: Math.round(s.bytes / 1024) }));
   if (state.surroundings) parts.push(t('stats.surr', { km: state.far, n: state.surroundings.buildings.length }));
+  const context = state.surroundings || {};
+  const mappedCount = (near, far) => new Set([...(near || []), ...(far || [])].map(a => a.id || JSON.stringify(a.outer))).size;
+  const paths = (list) => (list || []).filter((r) => FOOT_KINDS.has(r.kind));
+  parts.push(t('stats.context', { water: mappedCount(c.water, context.water), paths: mappedCount(paths(c.roads), paths(context.roads)) }));
+  if (renderer.mappedObjectCount) parts.push(t('stats.objects', { n: renderer.mappedObjectCount }));
   $('stats').textContent = parts.join(' · ');
+  $('stats').title = t('stats.accuracy');
   $('elevationCredit').textContent = state.elevation?.source ? `Elevation: ${state.elevation.source}` : 'Elevation unavailable (flat terrain)';
 }
 
@@ -331,6 +345,7 @@ function applyPreset(value) {
     const frame = fitBounds(bounds, { fov: renderer.camera.fov, aspect: renderer.camera.aspect,
       yaw: value === 'top' ? 0 : 0.55, pitch: value === 'top' ? -Math.PI / 2 + 0.001 : value === 'wide' ? -0.32 : -0.62 });
     rig.setOrbit({ ...frame, target: new THREE.Vector3(...frame.target) });
+    presetPose = poseKey();
   }
   else if (value.startsWith('vp')) {
     const vp = state.viewpoints[Number(value.slice(2))];

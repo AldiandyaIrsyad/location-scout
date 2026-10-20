@@ -24,11 +24,14 @@ func cityQuery(b geo.BBox) string {
 	landuse := alt(greenLanduse)
 	natural := alt(greenNatural)
 	rail := alt(railKinds)
+	landmarkKinds := alt([]string{"memorial", "monument"})
+	artworkKinds := alt([]string{"statue", "sculpture"})
 	return fmt.Sprintf(`[out:json][timeout:60];
 (
   way["building"]%[1]s;
   relation["building"]%[1]s;
   way["building:part"]%[1]s;
+  relation["building:part"]%[1]s;
   way["highway"]%[1]s;
   way["railway"~"%[2]s"]%[1]s;
   way["natural"="water"]%[1]s;
@@ -47,17 +50,63 @@ func cityQuery(b geo.BBox) string {
   way["amenity"="parking"]%[1]s;
   way["natural"="tree_row"]%[1]s;
   node["natural"="tree"]%[1]s;
+  node["historic"~"%[6]s"]%[1]s;
+  way["historic"~"%[6]s"]%[1]s;
+  relation["historic"~"%[6]s"]%[1]s;
+  node["tourism"="artwork"]["artwork_type"~"%[7]s"]%[1]s;
+  way["tourism"="artwork"]["artwork_type"~"%[7]s"]%[1]s;
+  relation["tourism"="artwork"]["artwork_type"~"%[7]s"]%[1]s;
+  node["amenity"="fountain"]%[1]s;
+  way["amenity"="fountain"]%[1]s;
+  relation["amenity"="fountain"]%[1]s;
 );
-out geom;`, bb, rail, leisure, landuse, natural)
+out geom;`, bb, rail, leisure, landuse, natural, landmarkKinds, artworkKinds)
 }
 
-// surroundingsQuery fetches building outlines only (same as osm.js surroundingsQuery).
-func surroundingsQuery(b geo.BBox) string {
-	bb := bboxStr(b)
+// surroundingsQuery fetches buildings across the requested far box and the other context
+// features within the smaller context box.
+func surroundingsQuery(far, context geo.BBox) string {
+	farBB := bboxStr(far)
+	contextBB := bboxStr(context)
+	rail := alt(railKinds)
+	leisure := alt(greenLeisure)
+	landuse := alt(greenLanduse)
+	natural := alt(greenNatural)
+	landmarkKinds := alt([]string{"memorial", "monument"})
+	artworkKinds := alt([]string{"statue", "sculpture"})
 	return fmt.Sprintf(`[out:json][timeout:60];
 (
   way["building"]%[1]s;
   relation["building"]%[1]s;
+  way["building:part"]%[1]s;
+  relation["building:part"]%[1]s;
+  way["highway"]%[2]s;
+  way["railway"~"%[3]s"]%[2]s;
+  way["natural"="water"]%[2]s;
+  relation["natural"="water"]%[2]s;
+  way["waterway"="riverbank"]%[2]s;
+  relation["waterway"="riverbank"]%[2]s;
+  way["landuse"="reservoir"]%[2]s;
+  relation["landuse"="reservoir"]%[2]s;
+  way["leisure"~"%[4]s"]%[2]s;
+  relation["leisure"~"%[4]s"]%[2]s;
+  way["landuse"~"%[5]s"]%[2]s;
+  relation["landuse"~"%[5]s"]%[2]s;
+  way["natural"~"%[6]s"]%[2]s;
+  relation["natural"~"%[6]s"]%[2]s;
+  way["place"="square"]%[2]s;
+  way["amenity"="parking"]%[2]s;
+  way["natural"="tree_row"]%[2]s;
+  node["natural"="tree"]%[2]s;
+  node["historic"~"%[7]s"]%[2]s;
+  way["historic"~"%[7]s"]%[2]s;
+  relation["historic"~"%[7]s"]%[2]s;
+  node["tourism"="artwork"]["artwork_type"~"%[8]s"]%[2]s;
+  way["tourism"="artwork"]["artwork_type"~"%[8]s"]%[2]s;
+  relation["tourism"="artwork"]["artwork_type"~"%[8]s"]%[2]s;
+  node["amenity"="fountain"]%[2]s;
+  way["amenity"="fountain"]%[2]s;
+  relation["amenity"="fountain"]%[2]s;
 );
-out geom;`, bb)
+out geom;`, farBB, contextBB, rail, leisure, landuse, natural, landmarkKinds, artworkKinds)
 }

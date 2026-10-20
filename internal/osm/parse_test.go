@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -111,6 +112,67 @@ func TestParseCounts(t *testing.T) {
 	}
 	if c.Center.Lat != testLat || c.Center.Lon != testLon || c.Size != testSize {
 		t.Errorf("center/size = %+v %d", c.Center, c.Size)
+	}
+}
+
+func TestMappedPropsAndFountainWater(t *testing.T) {
+	raw := []byte(`{"elements":[
+  {"type":"node","id":5001,"lat":35.6595,"lon":139.7005,"tags":{"historic":"memorial","name":"Remember","height":"12 m","material":"stone"}},
+  {"type":"node","id":5001,"lat":35.6595,"lon":139.7005,"tags":{"historic":"memorial","name":"Remember","height":"12 m","material":"stone"}},
+  {"type":"node","id":5002,"lat":35.6597,"lon":139.7007,"tags":{"tourism":"artwork","artwork_type":"statue"}},
+  {"type":"node","id":5004,"lat":35.6596,"lon":139.7006,"tags":{"historic":"memorial","memorial":"statue","name":"Statue Memorial"}},
+  {"type":"way","id":5003,"tags":{"amenity":"fountain","name":"Pond Fountain"},"geometry":[
+    {"lat":35.6593,"lon":139.7003},{"lat":35.6593,"lon":139.7007},
+    {"lat":35.6597,"lon":139.7007},{"lat":35.6597,"lon":139.7003},
+    {"lat":35.6593,"lon":139.7003}]}
+]}`)
+	c, err := Parse(raw, testLat, testLon, testSize, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Props) != 4 {
+		t.Fatalf("props = %d, want 4 after duplicate suppression: %+v", len(c.Props), c.Props)
+	}
+	byID := map[string]MappedObject{}
+	for _, p := range c.Props {
+		byID[p.ID] = p
+	}
+	if p := byID["n5001"]; p.Kind != "memorial" || p.Height != 12 || p.Guessed || p.Material != "stone" || p.Name != "Remember" {
+		t.Errorf("mapped memorial = %+v, want tagged height/material/name preserved", p)
+	}
+	if p := byID["n5002"]; p.Kind != "statue" || p.Height <= 0 || !p.Guessed {
+		t.Errorf("mapped statue = %+v, want bounded guessed height", p)
+	}
+	if p := byID["n5004"]; p.Kind != "statue" || p.Name != "Statue Memorial" {
+		t.Errorf("historic memorial statue = %+v, want statue kind", p)
+	}
+	if p := byID["w5003"]; p.Kind != "fountain" || p.Height <= 0 || len(p.Outer) != 4 {
+		t.Errorf("mapped fountain = %+v, want polygon prop", p)
+	}
+	if len(c.Water) != 1 || c.Water[0].ID != "w5003" || c.Water[0].Kind != "fountain" {
+		t.Errorf("fountain water = %+v, want one water area with the same id", c.Water)
+	}
+}
+
+func TestContextLinesKeepBaseIDsWhenSplit(t *testing.T) {
+	points := []geo.Point{{-2000, 0}, {0, 0}, {2000, 0}, {0, 0}, {-2000, 0}}
+	roads, railways := contextLines(
+		[]Road{{ID: "w1", Points: points}},
+		[]Railway{{ID: "r1", Points: points}},
+		box{minX: -1000, minY: -1000, maxX: 1000, maxY: 1000},
+	)
+	if len(roads) < 2 || len(railways) < 2 {
+		t.Fatalf("split line pieces = roads %d railways %d, want multiple pieces", len(roads), len(railways))
+	}
+	for i, r := range roads {
+		if want := "w1_" + strconv.Itoa(i); r.ID != want {
+			t.Errorf("road piece %d id = %q, want %q", i, r.ID, want)
+		}
+	}
+	for i, r := range railways {
+		if want := "r1_" + strconv.Itoa(i); r.ID != want {
+			t.Errorf("railway piece %d id = %q, want %q", i, r.ID, want)
+		}
 	}
 }
 
@@ -279,12 +341,19 @@ func TestToFixedMatchesJS(t *testing.T) {
 
 func TestGeneratedTrees(t *testing.T) {
 	c := parseSample(t, 0)
-	if c.Stats.Trees <= c.Stats.MappedTrees {
-		t.Errorf("trees = %d, want more than the %d mapped", c.Stats.Trees, c.Stats.MappedTrees)
+	if c.Stats.Trees != c.Stats.MappedTrees {
+		t.Errorf("trees = %d, want only the %d explicitly mapped trees for this non-canopy fixture", c.Stats.Trees, c.Stats.MappedTrees)
 	}
-	// 297 is the count osm.js produces for this fixture.
-	if len(c.Trees) != 297 {
-		t.Errorf("trees = %d, want 297 (osm.js output for this fixture)", len(c.Trees))
+	mappedNode := geo.ToLocal(35.6599522, 139.7010528, testLat, testLon)
+	foundNode := false
+	for _, p := range c.Trees {
+		if near(p[0], mappedNode[0], 1e-6) && near(p[1], mappedNode[1], 1e-6) {
+			foundNode = true
+			break
+		}
+	}
+	if !foundNode {
+		t.Errorf("mapped natural=tree node %v was not preserved", mappedNode)
 	}
 	half := float64(testSize) / 2
 	for _, p := range c.Trees {
@@ -366,6 +435,29 @@ func TestSurroundingsExcludeInnerBuildings(t *testing.T) {
 	}
 }
 
+func TestSurroundingsIncludesContextFeatures(t *testing.T) {
+	sur, err := ParseSurroundings(loadSample(t), testLat, testLon, testSize, 4000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sur.ContextSize != 2000 {
+		t.Errorf("context size = %d, want 2000", sur.ContextSize)
+	}
+	if len(sur.Roads) == 0 || len(sur.Railways) == 0 || len(sur.Water) == 0 || len(sur.Green) == 0 || len(sur.Areas) == 0 {
+		t.Errorf("context features missing roads=%d railways=%d water=%d green=%d areas=%d", len(sur.Roads), len(sur.Railways), len(sur.Water), len(sur.Green), len(sur.Areas))
+	}
+	if len(sur.Trees) == 0 {
+		t.Error("context mapped trees missing")
+	}
+	for _, r := range sur.Roads {
+		for _, p := range r.Points {
+			if math.Abs(p[0]) > 1000+1e-6 || math.Abs(p[1]) > 1000+1e-6 {
+				t.Errorf("context road %s point %v outside 2 km square", r.ID, p)
+			}
+		}
+	}
+}
+
 func TestDouglasPeuckerKeepsCorners(t *testing.T) {
 	ring := []geo.Point{{0, 0}, {5, 0.2}, {10, 0}, {10, 10}, {0, 10}}
 	got := simplifyRing(ring, 1.5)
@@ -381,7 +473,7 @@ func TestJSONSlicesNeverNull(t *testing.T) {
 		if err := json.Unmarshal(raw, &top); err != nil {
 			t.Fatal(err)
 		}
-		for _, k := range []string{"buildings", "roads", "railways", "water", "green", "areas", "trees", "viewpoints"} {
+		for _, k := range []string{"buildings", "roads", "railways", "water", "green", "areas", "trees", "props", "viewpoints"} {
 			v, ok := top[k]
 			if !ok || string(v) == "null" || !strings.HasPrefix(string(v), "[") {
 				t.Errorf("%s = %s, want a JSON array", k, v)
@@ -420,8 +512,17 @@ func TestJSONSlicesNeverNull(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw, _ = json.Marshal(sur)
-	if string(raw) != `{"buildings":[]}` {
-		t.Errorf("empty surroundings = %s", raw)
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &top); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"buildings", "roads", "railways", "water", "green", "areas", "trees", "props"} {
+		if v := string(top[k]); v != "[]" {
+			t.Errorf("empty surroundings %s = %s, want []", k, v)
+		}
+	}
+	if string(top["contextSize"]) != "800" {
+		t.Errorf("empty surroundings contextSize = %s, want 800", top["contextSize"])
 	}
 }
 

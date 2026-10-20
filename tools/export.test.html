@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Panelscape export regression checks</title>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","fflate":"https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js"}}
+</script>
+<pre id="result">Running…</pre>
+<!-- Run from the repository root with: python -m http.server 8082
+     Then open http://localhost:8082/tools/export.test.html -->
+<script type="module">
+import * as THREE from 'three';
+import { unzipSync, strFromU8 } from 'fflate';
+import { bakeGroup, glbBlob, objZipBlob, fbxBlob } from '../web/js/export.js';
+
+const assert = (ok, message) => { if (!ok) throw new Error(message); };
+const dispose = group => group.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); });
+const counts = group => {
+  let vertices = 0, indices = 0;
+  group.traverse(o => {
+    if (!o.isMesh) return;
+    const p = o.geometry.attributes.position;
+    vertices += p.count;
+    indices += o.geometry.index?.count || p.count;
+    assert(p.array.every(Number.isFinite), 'non-finite exported position');
+  });
+  return { vertices, indices };
+};
+
+try {
+  const group = new THREE.Group();
+  group.position.set(100, 20, 30);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute([0,0,0, 1,0,0, 0,1,0], 3));
+  geometry.computeVertexNormals();
+  const material = new THREE.MeshStandardMaterial();
+  const trees = new THREE.InstancedMesh(geometry, material, 2);
+  const active = new THREE.Matrix4().makeTranslation(10, 2, 3);
+  const inactive = new THREE.Matrix4(); inactive.elements.fill(0);
+  trees.setMatrixAt(0, active); trees.setMatrixAt(1, inactive);
+  group.add(trees);
+  const far = new THREE.Group(); far.userData.surroundings = true;
+  const farTrees = new THREE.InstancedMesh(geometry, material, 2);
+  farTrees.setMatrixAt(0, inactive); farTrees.setMatrixAt(1, active);
+  far.add(farTrees); group.add(far);
+  const hidden = new THREE.Group(); hidden.visible = false;
+  hidden.add(new THREE.Mesh(geometry, material)); group.add(hidden);
+
+  for (const include of [false, true]) {
+    const baked = bakeGroup(group, include), c = counts(baked);
+    assert(c.vertices === (include ? 6 : 3), `inactive crowns or excluded context exported: ${JSON.stringify(c)}`);
+    assert(c.indices === c.vertices, 'unexpected triangle count');
+    assert(baked.children[0].geometry.attributes.position.getX(0) === 10, 'root transform applied twice');
+    assert(baked.children[0].geometry.attributes.normal.array.every(Number.isFinite), 'non-finite normals');
+    dispose(baked);
+  }
+  assert(trees.instanceMatrix.array.slice(16).every(v => v === 0), 'export mutated live instance matrices');
+  const renderer = { cityGroup: group };
+  const glb = new DataView(await (await glbBlob(renderer)).arrayBuffer());
+  assert(glb.getUint32(0, true) === 0x46546c67, 'invalid GLB header');
+  const jsonLength = glb.getUint32(12, true);
+  const json = JSON.parse(new TextDecoder().decode(new Uint8Array(glb.buffer, 20, jsonLength)));
+  const primitive = json.meshes[0].primitives[0];
+  assert(json.accessors[primitive.attributes.POSITION].count === 3, 'GLB contains inactive or surroundings instances');
+  const files = unzipSync(new Uint8Array(await (await objZipBlob(renderer)).arrayBuffer()));
+  const obj = strFromU8(Object.entries(files).find(([name]) => name.endsWith('.obj'))[1]);
+  assert((obj.match(/^v /gm) || []).length === 3, 'OBJ contains inactive or surroundings instances');
+  assert((obj.match(/^f /gm) || []).length === 1, 'OBJ contains collapsed triangles');
+  const fbx = new Uint8Array(await (await fbxBlob(renderer)).arrayBuffer());
+  assert(new TextDecoder().decode(fbx.slice(0, 18)) === 'Kaydara FBX Binary', 'invalid FBX header');
+  geometry.dispose(); material.dispose();
+  document.getElementById('result').textContent = 'PASS: inactive LOD crowns, surroundings filtering, hidden groups, root transforms, live matrices, GLB, OBJ and FBX.';
+  window.testResult = { passed: true };
+} catch (error) {
+  document.getElementById('result').textContent = `FAIL: ${error.stack}`;
+  window.testResult = { passed: false, error: error.message };
+  throw error;
+}
+</script>

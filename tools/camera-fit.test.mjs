@@ -27,7 +27,7 @@ for (const aspect of [0.55, 1, 2.55]) for (const height of [20, 330, 828]) {
     const radius = Math.hypot(...bounds.min.map((v, i) => bounds.max[i] - v)) / 2;
     const range = viewDepthRange(pose.distance, radius);
     for (const p of projectedCorners(bounds, settings, pose)) {
-      assert.ok(p.depth > 0, 'every corner must be in front of the camera');
+      assert.ok(p.depth > range.near, 'every corner must survive the near clipping plane');
       assert.ok(p.depth < range.far && p.depth < range.fogNear, 'framed geometry must survive depth clipping and fog');
       assert.ok(Math.abs(p.x) < 1 && Math.abs(p.y) < 1, 'every corner must fit in the viewport');
     }

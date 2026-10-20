@@ -619,6 +619,9 @@ export function bakeGroup(group, includeSurroundings = false) {
       const M = new THREE.Matrix4();
       for (let i = 0; i < obj.count; i++) {
         obj.getMatrixAt(i, instMatrix);
+        // Tree LOD hides inactive crowns with an all-zero instance matrix.
+        // Do not bake their collapsed triangles into the exported model.
+        if (instMatrix.elements.every((v) => v === 0)) continue;
         M.multiplyMatrices(rel, instMatrix);
         let inst = null;
         if (obj.instanceColor) {

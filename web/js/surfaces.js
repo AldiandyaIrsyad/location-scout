@@ -1,8 +1,8 @@
 // Terrain is bare earth: bridge decks and water surfaces must not follow its riverbed.
 // Heights here use the renderer's local vertical datum, not absolute sea level.
 const areaBounds = new WeakMap();
-export function inArea(x, y, area) {
-  if (!area.outer?.length) return false;
+// [minX, minY, maxX, maxY] of the outer ring, cached per area.
+function boundsOf(area) {
   let bounds = areaBounds.get(area);
   if (!bounds) {
     bounds = [Infinity, Infinity, -Infinity, -Infinity];
@@ -12,6 +12,12 @@ export function inArea(x, y, area) {
     }
     areaBounds.set(area, bounds);
   }
+  return bounds;
+}
+
+export function inArea(x, y, area) {
+  if (!area.outer?.length) return false;
+  const bounds = boundsOf(area);
   if (x < bounds[0] || y < bounds[1] || x > bounds[2] || y > bounds[3]) return false;
   const inRing = (ring) => {
     let inside = false;
@@ -34,8 +40,7 @@ const deckLayer = (r) => Math.max(1, r.layer || 1);
 
 function interiorHeights(area, half, terrainAt) {
   // Scan the actual polygon interior. A fixed square grid can miss a narrow canal entirely.
-  inArea(0, 0, area); // populate its cached bounds
-  const bounds = areaBounds.get(area);
+  const bounds = boundsOf(area);
   const lo = Math.max(-half, bounds[1]), hi = Math.min(half, bounds[3]);
   const samples = [];
   if (hi <= lo) return samples;
@@ -72,12 +77,15 @@ export function makeSurfaces(city, elevation, terrainAt, { deckHint } = {}) {
     }
     // The lower interior quantile rejects embankments and DEM surface noise. Preserve a mapped
     // absolute water elevation when supplied. This is a local visual estimate, not a tidal model.
-    const h = Number.isFinite(a.elevation) && elevation ? a.elevation - elevation.baseElevation : quantile(samples, 0.2);
+    const mapped = Number.isFinite(a.elevation) && Number.isFinite(elevation?.baseElevation);
+    const h = mapped ? a.elevation - elevation.baseElevation : quantile(samples, 0.2);
     water.set(a, h + 0.05);
   }
+  // Keyed by the millimetre position as one number; a string key per query is wasteful, since
+  // terrain, roads and crowd all ask for the water level at every vertex they place.
   const waterSamples = new Map();
   const waterHeightAt = (x, y) => {
-    const key = `${Math.round(x * 1000)},${Math.round(y * 1000)}`;
+    const key = (Math.round(x * 1000) + 1e7) * 2e7 + Math.round(y * 1000) + 1e7;
     if (waterSamples.has(key)) return waterSamples.get(key);
     let h = null;
     for (const [a, level] of water) if (inArea(x, y, a)) h = h === null ? level : Math.min(h, level);

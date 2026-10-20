@@ -24,25 +24,41 @@ type LatLon struct {
 
 // CityData is the JSON document served by /api/city. Coordinates are local meters (x east, y north).
 type CityData struct {
-	Center     LatLon      `json:"center"`
-	Size       int         `json:"size"`
-	Seed       int         `json:"seed"`
-	Buildings  []Building  `json:"buildings"`
-	Roads      []Road      `json:"roads"`
-	Railways   []Railway   `json:"railways"`
-	Water      []Area      `json:"water"`
-	Green      []Area      `json:"green"`
-	Areas      []Area      `json:"areas"`
-	Trees      []geo.Point `json:"trees"`
-	Viewpoints []Viewpoint `json:"viewpoints"`
-	Stats      Stats       `json:"stats"`
+	Center     LatLon         `json:"center"`
+	Size       int            `json:"size"`
+	Seed       int            `json:"seed"`
+	Buildings  []Building     `json:"buildings"`
+	Roads      []Road         `json:"roads"`
+	Railways   []Railway      `json:"railways"`
+	Water      []Area         `json:"water"`
+	Green      []Area         `json:"green"`
+	Areas      []Area         `json:"areas"`
+	Trees      []geo.Point    `json:"trees"`
+	Props      []MappedObject `json:"props"`
+	Viewpoints []Viewpoint    `json:"viewpoints"`
+	Stats      Stats          `json:"stats"`
 }
 
 // Area is a polygon; outer ring counter-clockwise, holes clockwise.
 type Area struct {
+	ID    string        `json:"id"`
 	Outer []geo.Point   `json:"outer"`
 	Holes [][]geo.Point `json:"holes"`
 	Kind  string        `json:"kind"`
+}
+
+// MappedObject is a small mapped landmark or point feature such as a statue,
+// memorial, monument, or fountain. Position is local [x, y] metres from the
+// city centre; Outer is present for mapped polygon features.
+type MappedObject struct {
+	ID       string      `json:"id"`
+	Name     string      `json:"name"`
+	Kind     string      `json:"kind"`
+	Position geo.Point   `json:"position"`
+	Height   float64     `json:"height"`
+	Guessed  bool        `json:"guessed"`
+	Outer    []geo.Point `json:"outer,omitempty"`
+	Material string      `json:"material,omitempty"`
 }
 
 // Building is an extruded footprint.
@@ -78,6 +94,10 @@ type Railway struct {
 	ID     string      `json:"id"`
 	Points []geo.Point `json:"points"`
 	Kind   string      `json:"kind"`
+	Name   string      `json:"name"`
+	Bridge bool        `json:"bridge"`
+	Tunnel bool        `json:"tunnel"`
+	Layer  int         `json:"layer"`
 }
 
 // Viewpoint is a suggested camera position.
@@ -101,5 +121,13 @@ type Stats struct {
 
 // Surroundings is the JSON document served by /api/surroundings.
 type Surroundings struct {
-	Buildings []Building `json:"buildings"`
+	Buildings   []Building     `json:"buildings"`
+	Roads       []Road         `json:"roads"`
+	Railways    []Railway      `json:"railways"`
+	Water       []Area         `json:"water"`
+	Green       []Area         `json:"green"`
+	Areas       []Area         `json:"areas"`
+	Trees       []geo.Point    `json:"trees"`
+	Props       []MappedObject `json:"props"`
+	ContextSize int            `json:"contextSize"`
 }

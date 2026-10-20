@@ -1,5 +1,5 @@
-// Well-known urban spots: the built-in candidate list, in display order. Kept short for now (the full
-// list is in .local/places-all.js) and grown again once the known scene issues are fixed.
+// Well-known urban spots: the built-in candidate list, in display order. Kept short for now and grown
+// again once the known scene issues are fixed.
 // internal/places embeds the same list (places.json); a Go test keeps the two in sync.
 
 export const PLACES = [

@@ -5,7 +5,10 @@ export function viewDepthRange(distance = 0, radius = 0, detailDistance = 1) {
   const back = Math.max(0, distance) + Math.max(0, radius);
   const fogNear = Math.max(base * 0.55, back + 10);
   const far = Math.max(base, (fogNear + Math.max(100, radius * 0.5)) / 0.95);
-  return { far, fogNear, fogFar: far * 0.95 };
+  // An overview needs depth precision for centimetre-separated map layers.
+  // Keep the close plane usable at street level and move it out only beyond the near scene.
+  const near = Math.max(0.5, Math.min(20, (Math.max(0,distance)-Math.max(0,radius))*0.02));
+  return { near, far, fogNear, fogFar: far * 0.95 };
 }
 
 export function fitBounds(bounds, { fov, aspect, yaw = 0.55, pitch = -0.62, margin = 1.12 }) {

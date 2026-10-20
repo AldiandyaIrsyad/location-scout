@@ -2,6 +2,9 @@
 // the results; this module only asks for them. URLs are relative (api/...), so the app also works
 // under a sub-path. Local coordinates are meters, x = east, y = north, origin = the area center.
 
+// Keep browser-cached responses separate when the parsed data schema changes.
+const DATA_VERSION = 2;
+
 /**
  * Buildings, roads, railways, water, green areas, trees and viewpoints for a size x size meter square
  * centered on lat/lon. seed re-rolls guessed building heights (0 = the default heights).
@@ -12,11 +15,10 @@ export async function fetchCity({ lat, lon, size, seed = 0, signal, onProgress }
 }
 
 /**
- * Building footprints in the farSize square (meters), outside the inner size square, simplified by
- * the server.
+ * Simplified far buildings plus mapped water, paths, land cover, trees and objects.
  */
 export async function fetchSurroundings({ lat, lon, size, farSize, signal, onProgress }) {
-  onProgress?.('Fetching surrounding buildings');
+  onProgress?.('Fetching mapped surroundings');
   return getJSON('api/surroundings', { lat, lon, size, far: farSize }, signal).then((data) => ({ ...data, farSize }));
 }
 
@@ -26,7 +28,7 @@ export function findViewpoints(city) {
 }
 
 async function getJSON(path, params, signal) {
-  const query = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
+  const query = new URLSearchParams(Object.entries({ ...params, v: DATA_VERSION }).map(([k, v]) => [k, String(v)]));
   const res = await fetch(`${path}?${query}`, { signal, headers: { Accept: 'application/json' } });
   let body = null;
   try {

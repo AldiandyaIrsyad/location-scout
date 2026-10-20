@@ -120,6 +120,25 @@ func TestCityResultIsCached(t *testing.T) {
 	}
 }
 
+func TestResultCacheKeysUseV2Schema(t *testing.T) {
+	f := newFakeFetcher(loadSample(t))
+	results := newMemCache()
+	svc := NewService(f, []string{urlA}, time.Hour, results, time.Hour, nil)
+	ctx := context.Background()
+	if _, err := svc.City(ctx, testLat, testLon, testSize, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Surroundings(ctx, testLat, testLon, testSize, 800); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := results.m["city:v2:35.65950:139.70050:400:0"]; !ok {
+		t.Errorf("city result cache did not use v2 key; keys=%v", results.m)
+	}
+	if _, ok := results.m["sur:v2:35.65950:139.70050:400:800"]; !ok {
+		t.Errorf("surroundings result cache did not use v2 key; keys=%v", results.m)
+	}
+}
+
 func TestCityFallsBackToSecondURL(t *testing.T) {
 	f := newFakeFetcher(loadSample(t))
 	f.fail[urlA] = &upstream.StatusError{URL: urlA, Status: 502}

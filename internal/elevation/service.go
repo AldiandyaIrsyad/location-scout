@@ -43,12 +43,15 @@ type tileSource struct {
 	maxZoom int // 0 means no limit
 	format  string
 	decode  func(px []uint8, o int) float64
+	// sample, when set, reads the height at tile pixel (x, y) instead of decode alone, so a source
+	// can repair its own known artefacts using neighbouring pixels.
+	sample func(tile rgbaTile, x, y int) float64
 }
 
 // sourcesFor returns the providers to try, in order: GSI 5 m, GSI 10 m, Terrarium inside Japan;
 // Terrarium elsewhere.
 func sourcesFor(lat, lon float64) []tileSource {
-	terrarium := tileSource{name: "Terrain Tiles", format: terrariumFormat, decode: decodeTerrarium}
+	terrarium := tileSource{name: "Terrain Tiles", format: terrariumFormat, decode: decodeTerrarium, sample: terrainSample}
 	if inJapan(lat, lon) {
 		return []tileSource{
 			{name: "GSI 5 m", maxZoom: 15, format: gsi5mFormat, decode: decodeGSI},
@@ -294,7 +297,6 @@ func (s *GridService) build(ctx context.Context, lat, lon, size float64, n int) 
 	// Unresolved cells become zero-valued entries in the relative float32 grid below. Keep that
 	// degraded grid out of the result cache so a later request can recover missing source data.
 	degraded = degraded || anyNaN(absolute)
-
 	centre := n/2 + (n/2)*n
 	centreHeight := absolute[centre]
 	if math.IsNaN(centreHeight) || math.IsInf(centreHeight, 0) {
@@ -351,9 +353,11 @@ func (s *GridService) sampleSource(ctx context.Context, src tileSource, z int, a
 			}
 			lx := clampInt(int(math.Floor(px-float64(tx)*tilePx)), 0, tilePx-1)
 			ly := clampInt(int(math.Floor(py-float64(ty)*tilePx)), 0, tilePx-1)
-			h := src.decode(tile, (ly*tilePx+lx)*4)
-			if src.name == "Terrain Tiles" {
-				h = terrainSample(tile, lx, ly)
+			var h float64
+			if src.sample != nil {
+				h = src.sample(tile, lx, ly)
+			} else {
+				h = src.decode(tile, (ly*tilePx+lx)*4)
 			}
 			if !math.IsNaN(h) && !math.IsInf(h, 0) {
 				absolute[k] = h

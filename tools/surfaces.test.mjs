@@ -61,3 +61,15 @@ test('different bridge levels stay separate; tunnels never become elevated decks
   assert.ok(s.heightFor(b,0,0)>s.heightFor(a,0,0));
   assert.equal(s.profiles.has(tunnel),false);
 });
+
+test('a mapped water elevation needs a finite datum; otherwise the level is estimated from terrain', () => {
+  const mapped = { ...water, elevation: 10 };
+  const withDatum = makeSurfaces({ size: 300, water: [mapped], roads: [] }, { baseElevation: 4 }, terrain);
+  assert.equal(withDatum.waterHeightAt(0, 0), 6.05);
+  for (const elevation of [{}, { baseElevation: NaN }, null]) {
+    const s = makeSurfaces({ size: 300, water: [mapped], roads: [] }, elevation, terrain);
+    assert.ok(Number.isFinite(s.waterHeightAt(0, 0)), 'water level must stay finite');
+    assert.ok(Number.isFinite(s.groundAt(0, 0)), 'water must not poison the ground height');
+    assert.ok(s.waterHeightAt(0, 0) < 0, 'estimated from the riverbed, not the mapped elevation');
+  }
+});

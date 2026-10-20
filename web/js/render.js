@@ -3095,7 +3095,7 @@ export class CityRenderer {
   // ----- post effects and world effects -------------------------------------------
 
   /**
-   * Effect list (see docs/EFFECTS.md): post effects go to the EffectStack; the world effects (night, rain,
+   * Effect list: post effects go to the EffectStack; the world effects (night, rain,
    * snow, petals) are applied here. strength 0 or disabled = off. Changing the list does not rebuild the city,
    * except that lamp geometry is added or removed.
    */

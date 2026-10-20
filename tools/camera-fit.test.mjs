@@ -42,3 +42,15 @@ test('top view fits on a narrow display and leaves the input bounds intact', () 
   for (const p of projectedCorners(bounds, settings, pose)) assert.ok(Math.abs(p.x) < 1 && Math.abs(p.y) < 1);
   assert.deepEqual(bounds, original);
 });
+
+test('orbiting around the ground keeps a tall scene fully framed and the pivot at street level', () => {
+  const bounds = { min: [-150, -12, -150], max: [150, 330, 150] };
+  for (const aspect of [0.55, 1.6]) {
+    const settings = { fov: 41.112, aspect, groundY: 2 };
+    const pose = fitBounds(bounds, settings);
+    assert.equal(pose.target[1], 2, 'zooming in must end at ground level, not at mid-height of the tallest building');
+    for (const p of projectedCorners(bounds, settings, pose)) {
+      assert.ok(p.depth > 0 && Math.abs(p.x) < 1 && Math.abs(p.y) < 1, 'every corner must fit in the viewport');
+    }
+  }
+});

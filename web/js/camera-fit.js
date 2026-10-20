@@ -11,8 +11,12 @@ export function viewDepthRange(distance = 0, radius = 0, detailDistance = 1) {
   return { near, far, fogNear, fogFar: far * 0.95 };
 }
 
-export function fitBounds(bounds, { fov, aspect, yaw = 0.55, pitch = -0.62, margin = 1.12 }) {
+// groundY, when given, is the height the camera orbits and zooms around instead of the middle of the
+// bounds. A tall landmark would otherwise put that pivot hundreds of metres up and zooming in could
+// never reach street level; the distance is still fitted so every corner stays in view.
+export function fitBounds(bounds, { fov, aspect, yaw = 0.55, pitch = -0.62, margin = 1.12, groundY }) {
   const center = bounds.min.map((v, i) => (v + bounds.max[i]) / 2);
+  if (Number.isFinite(groundY)) center[1] = groundY;
   const sy = Math.sin(yaw), cy = Math.cos(yaw), sp = Math.sin(pitch), cp = Math.cos(pitch);
   const right = [cy, 0, sy];
   const up = [-sy * sp, cp, cy * sp];

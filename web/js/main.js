@@ -342,7 +342,8 @@ function applyPreset(value) {
       bounds.min[0] = Math.min(bounds.min[0], -half); bounds.max[0] = Math.max(bounds.max[0], half);
       bounds.min[2] = Math.min(bounds.min[2], -half); bounds.max[2] = Math.max(bounds.max[2], half);
     }
-    const frame = fitBounds(bounds, { fov: renderer.camera.fov, aspect: renderer.camera.aspect,
+    const cx = (bounds.min[0] + bounds.max[0]) / 2, cz = (bounds.min[2] + bounds.max[2]) / 2;
+    const frame = fitBounds(bounds, { fov: renderer.camera.fov, aspect: renderer.camera.aspect, groundY: groundAt(cx, -cz),
       yaw: value === 'top' ? 0 : 0.55, pitch: value === 'top' ? -Math.PI / 2 + 0.001 : value === 'wide' ? -0.32 : -0.62 });
     rig.setOrbit({ ...frame, target: new THREE.Vector3(...frame.target) });
     presetPose = poseKey();

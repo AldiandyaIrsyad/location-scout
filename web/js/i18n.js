@@ -434,6 +434,7 @@ export const DICT = {
     "hint.look": "Drag: look around · Wheel / W S: walk · A D: sidestep · Click: drop a pin",
     "hint.trackpad": "Two-finger drag: pan · Pinch: zoom · Drag: orbit · Click: drop a pin",
     "vp.crossing": "Crossing {n} {names}",
+    "vp.subject": "Street view · facing the centre",
     "vp.eye": "Central street · eye level {name}",
     "vp.low": "Central street · low angle {name}",
     "vp.down": "Central street · looking down {name}"

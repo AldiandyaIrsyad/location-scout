@@ -8,6 +8,7 @@ import { fetchCity, fetchSurroundings, findViewpoints } from './osm.js';
 import { fetchElevation } from './elevation.js';
 import { fitBounds } from './camera-fit.js';
 import { inArea } from './surfaces.js';
+import { subjectViewpoint } from './street-view.js';
 import { parseLocation, parseKmlFile } from './coords.js';
 import { loadPlaces, searchPlaces } from './places.js';
 import { FORMATS, makeFile, suggestedName, prepareSave, commitSave, chooseFolder, currentFolder, supportsFolders } from './save.js';
@@ -266,12 +267,19 @@ const nextFrame = () => new Promise((r) => {
 });
 
 function safeViewpoints(city) {
+  let list = [];
   try {
-    return (findViewpoints(city) || []).filter((vp) => {
+    list = (findViewpoints(city) || []).filter((vp) => {
       const [x, y] = vp.position, eye = vp.eyeHeight ?? 1.6;
       return !(city.buildings || []).some((b) => b.height > eye && (b.minHeight || 0) < eye && inArea(x, y, b));
     });
-  } catch (err) { console.warn(err); return []; }
+  } catch (err) { console.warn(err); }
+  // First entry: the place itself seen from the street, which is what a background reference needs.
+  try {
+    const subject = subjectViewpoint(city);
+    if (subject) list.unshift(subject);
+  } catch (err) { console.warn(err); }
+  return list;
 }
 
 $('loadRetryBtn').addEventListener('click', () => build());
@@ -313,6 +321,7 @@ function vpLabel(vp) {
     const m = label.match(/^Crossing (\d+) ?(.*)$/);
     return m ? t('vp.crossing', { n: m[1], names: m[2] }).trim() : label;
   }
+  if (vp.kind === 'street-subject') return t('vp.subject');
   const key = { 'street-eye': 'vp.eye', 'street-low': 'vp.low', 'street-down': 'vp.down' }[vp.kind];
   const m = label.match(/^Central street · (?:eye level|low angle|looking down) (.*)$/);
   return key && m ? t(key, { name: m[1] }) : label;
@@ -353,7 +362,7 @@ function applyPreset(value) {
     if (!vp) return;
     const [px, py] = vp.position, [tx, ty] = vp.target;
     const eyeY = groundAt(px, py) + (vp.eyeHeight ?? 1.6);
-    const targetY = groundAt(tx, ty) + (vp.kind === 'street-down' ? 0 : vp.kind === 'street-low' ? 6 : 2.5);
+    const targetY = groundAt(tx, ty) + (vp.lookHeight ?? (vp.kind === 'street-down' ? 0 : vp.kind === 'street-low' ? 6 : 2.5));
     const dist = Math.hypot(tx - px, ty - py);
     const yaw = Math.atan2(tx - px, ty - py);
     let pitch = Math.atan2(targetY - eyeY, Math.max(1, dist));
@@ -375,9 +384,12 @@ function applyInitialView() {
     rig.setOrbit({ target: new THREE.Vector3(0, groundAt(0, 0), 0), distance: range, yaw: THREE.MathUtils.degToRad(v.heading ?? 0), pitch: -(Math.PI / 2 - tilt) });
     $('cameraSelect').value = 'free';
   } else {
-    // Named places should open with their scene in frame. Street viewpoints remain optional.
-    $('cameraSelect').value = 'overview';
-    applyPreset('overview');
+    // Open at street level facing the place: that is the reference a background artist needs.
+    // Without a usable street (or in clay style) fall back to the overview of the whole area.
+    const street = state.viewpoints.findIndex((vp) => vp.kind === 'street-subject');
+    const start = street >= 0 && state.style !== 'clay' ? `vp${street}` : 'overview';
+    $('cameraSelect').value = start;
+    applyPreset(start);
   }
 }
 

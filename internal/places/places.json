@@ -1,0 +1,1700 @@
+[
+  {
+    "name": "Shibuya Crossing, Tokyo",
+    "lat": 35.6595,
+    "lon": 139.7005,
+    "group": "Japan"
+  },
+  {
+    "name": "Kabukicho, Shinjuku, Tokyo",
+    "lat": 35.6938,
+    "lon": 139.7036,
+    "group": "Japan"
+  },
+  {
+    "name": "Akihabara, Tokyo",
+    "lat": 35.6984,
+    "lon": 139.7731,
+    "group": "Japan"
+  },
+  {
+    "name": "Asakusa Senso-ji, Tokyo",
+    "lat": 35.7148,
+    "lon": 139.7967,
+    "group": "Japan"
+  },
+  {
+    "name": "Tokyo Tower",
+    "lat": 35.6586,
+    "lon": 139.7454,
+    "group": "Japan"
+  },
+  {
+    "name": "Tokyo Station",
+    "lat": 35.6812,
+    "lon": 139.7671,
+    "group": "Japan"
+  },
+  {
+    "name": "Yokohama Minato Mirai",
+    "lat": 35.4547,
+    "lon": 139.6323,
+    "group": "Japan"
+  },
+  {
+    "name": "Kyoto Fushimi Inari Shrine",
+    "lat": 34.9671,
+    "lon": 135.7727,
+    "group": "Japan"
+  },
+  {
+    "name": "Kyoto Gion Hanamikoji Street",
+    "lat": 35.0036,
+    "lon": 135.7756,
+    "group": "Japan"
+  },
+  {
+    "name": "Osaka Dotonbori",
+    "lat": 34.6687,
+    "lon": 135.5013,
+    "group": "Japan"
+  },
+  {
+    "name": "Todai-ji Great Buddha, Nara",
+    "lat": 34.689,
+    "lon": 135.8398,
+    "group": "Japan"
+  },
+  {
+    "name": "Hiroshima Peace Memorial Park",
+    "lat": 34.3955,
+    "lon": 132.4536,
+    "group": "Japan"
+  },
+  {
+    "name": "Kamakurakokomae Railroad Crossing",
+    "lat": 35.305,
+    "lon": 139.504,
+    "group": "Japan"
+  },
+  {
+    "name": "Odori Park, Sapporo",
+    "lat": 43.06,
+    "lon": 141.3538,
+    "group": "Japan"
+  },
+  {
+    "name": "Nakasu, Fukuoka",
+    "lat": 33.5937,
+    "lon": 130.4069,
+    "group": "Japan"
+  },
+  {
+    "name": "Kokusai-dori, Naha, Okinawa",
+    "lat": 26.2146,
+    "lon": 127.6812,
+    "group": "Japan"
+  },
+  {
+    "name": "Gwanghwamun Square, Seoul",
+    "lat": 37.5759,
+    "lon": 126.9768,
+    "group": "South Korea"
+  },
+  {
+    "name": "Myeongdong, Seoul",
+    "lat": 37.5636,
+    "lon": 126.9869,
+    "group": "South Korea"
+  },
+  {
+    "name": "Gangnam Station, Seoul",
+    "lat": 37.4979,
+    "lon": 127.0276,
+    "group": "South Korea"
+  },
+  {
+    "name": "Hongdae, Seoul",
+    "lat": 37.5563,
+    "lon": 126.9236,
+    "group": "South Korea"
+  },
+  {
+    "name": "Namsan Tower, Seoul",
+    "lat": 37.5512,
+    "lon": 126.9882,
+    "group": "South Korea"
+  },
+  {
+    "name": "Dongdaemun Design Plaza, Seoul",
+    "lat": 37.5665,
+    "lon": 127.0093,
+    "group": "South Korea"
+  },
+  {
+    "name": "Bukchon Hanok Village, Seoul",
+    "lat": 37.5826,
+    "lon": 126.9835,
+    "group": "South Korea"
+  },
+  {
+    "name": "Itaewon, Seoul",
+    "lat": 37.5345,
+    "lon": 126.9946,
+    "group": "South Korea"
+  },
+  {
+    "name": "Lotte World Tower, Seoul",
+    "lat": 37.5126,
+    "lon": 127.1025,
+    "group": "South Korea"
+  },
+  {
+    "name": "Seongsu-dong, Seoul",
+    "lat": 37.5446,
+    "lon": 127.0557,
+    "group": "South Korea"
+  },
+  {
+    "name": "Gamcheon Culture Village, Busan",
+    "lat": 35.0975,
+    "lon": 129.0106,
+    "group": "South Korea"
+  },
+  {
+    "name": "Nampo-dong and Jagalchi Market, Busan",
+    "lat": 35.0968,
+    "lon": 129.0306,
+    "group": "South Korea"
+  },
+  {
+    "name": "Busan (South Korea)",
+    "lat": 35.1587,
+    "lon": 129.1604,
+    "group": "South Korea"
+  },
+  {
+    "name": "Incheon Chinatown",
+    "lat": 37.4742,
+    "lon": 126.6178,
+    "group": "South Korea"
+  },
+  {
+    "name": "Daegu Dongseongno",
+    "lat": 35.8686,
+    "lon": 128.5948,
+    "group": "South Korea"
+  },
+  {
+    "name": "Jeonju Hanok Village",
+    "lat": 35.8149,
+    "lon": 127.153,
+    "group": "South Korea"
+  },
+  {
+    "name": "Seongsan Ilchulbong, Jeju",
+    "lat": 33.458,
+    "lon": 126.9425,
+    "group": "South Korea"
+  },
+  {
+    "name": "The Bund, Shanghai",
+    "lat": 31.24,
+    "lon": 121.49,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Nanjing Road, Shanghai",
+    "lat": 31.235,
+    "lon": 121.474,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Forbidden City, Beijing",
+    "lat": 39.9163,
+    "lon": 116.3972,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Wangfujing, Beijing",
+    "lat": 39.9155,
+    "lon": 116.4115,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Beijing (China)",
+    "lat": 39.9042,
+    "lon": 116.3914,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Xi'an (China)",
+    "lat": 34.2606,
+    "lon": 108.9426,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Guangzhou (China)",
+    "lat": 23.1066,
+    "lon": 113.3244,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Chengdu (China)",
+    "lat": 30.6565,
+    "lon": 104.0796,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Chongqing (China)",
+    "lat": 29.56,
+    "lon": 106.5764,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Shenzhen (China)",
+    "lat": 22.5438,
+    "lon": 114.0581,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Victoria Harbour, Tsim Sha Tsui, Hong Kong",
+    "lat": 22.295,
+    "lon": 114.17,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Mong Kok Ladies Market, Hong Kong",
+    "lat": 22.3193,
+    "lon": 114.1694,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Lan Kwai Fong, Central, Hong Kong",
+    "lat": 22.281,
+    "lon": 114.1549,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Causeway Bay, Hong Kong",
+    "lat": 22.2804,
+    "lon": 114.1831,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Ulaanbaatar (Mongolia)",
+    "lat": 47.9188,
+    "lon": 106.9175,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Taipei 101",
+    "lat": 25.0339,
+    "lon": 121.5645,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Ximending, Taipei",
+    "lat": 25.0421,
+    "lon": 121.5076,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Shilin Night Market, Taipei",
+    "lat": 25.0878,
+    "lon": 121.524,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Kaohsiung (Taiwan)",
+    "lat": 22.6747,
+    "lon": 120.2912,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Tainan (Taiwan)",
+    "lat": 23.0014,
+    "lon": 120.1604,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Taichung (Taiwan)",
+    "lat": 24.1786,
+    "lon": 120.6459,
+    "group": "Greater China and Mongolia"
+  },
+  {
+    "name": "Monas, Jakarta",
+    "lat": -6.1754,
+    "lon": 106.8272,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Yogyakarta (Indonesia)",
+    "lat": -7.7929,
+    "lon": 110.3657,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Petronas Towers, Kuala Lumpur",
+    "lat": 3.1579,
+    "lon": 101.7116,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Bukit Bintang, Kuala Lumpur",
+    "lat": 3.1466,
+    "lon": 101.7105,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Yangon (Myanmar)",
+    "lat": 16.7983,
+    "lon": 96.1496,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Intramuros, Manila",
+    "lat": 14.5896,
+    "lon": 120.9747,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Marina Bay Sands, Singapore",
+    "lat": 1.2834,
+    "lon": 103.8607,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Merlion Park, Singapore",
+    "lat": 1.2868,
+    "lon": 103.8545,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Orchard Road, Singapore",
+    "lat": 1.3048,
+    "lon": 103.8318,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Chinatown, Singapore",
+    "lat": 1.2813,
+    "lon": 103.8448,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Grand Palace, Bangkok",
+    "lat": 13.75,
+    "lon": 100.4913,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Khao San Road, Bangkok",
+    "lat": 13.759,
+    "lon": 100.4975,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Chatuchak Weekend Market, Bangkok",
+    "lat": 13.7999,
+    "lon": 100.5503,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Siam Square, Bangkok",
+    "lat": 13.7456,
+    "lon": 100.534,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Yaowarat Road, Bangkok",
+    "lat": 13.743,
+    "lon": 100.511,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Chiang Mai (Thailand)",
+    "lat": 18.7868,
+    "lon": 98.993,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Hoan Kiem Lake, Hanoi",
+    "lat": 21.0285,
+    "lon": 105.8523,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Hanoi Old Quarter",
+    "lat": 21.0338,
+    "lon": 105.8502,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Ben Thanh Market, Ho Chi Minh City",
+    "lat": 10.7725,
+    "lon": 106.698,
+    "group": "Southeast Asia"
+  },
+  {
+    "name": "Dhaka (Bangladesh)",
+    "lat": 23.7076,
+    "lon": 90.4063,
+    "group": "South Asia"
+  },
+  {
+    "name": "Gateway of India, Mumbai",
+    "lat": 18.922,
+    "lon": 72.8347,
+    "group": "South Asia"
+  },
+  {
+    "name": "Chandni Chowk, Delhi",
+    "lat": 28.6506,
+    "lon": 77.2303,
+    "group": "South Asia"
+  },
+  {
+    "name": "Mumbai (India)",
+    "lat": 18.9398,
+    "lon": 72.8355,
+    "group": "South Asia"
+  },
+  {
+    "name": "New Delhi (India)",
+    "lat": 28.6315,
+    "lon": 77.2167,
+    "group": "South Asia"
+  },
+  {
+    "name": "Bengaluru (India)",
+    "lat": 12.9794,
+    "lon": 77.5912,
+    "group": "South Asia"
+  },
+  {
+    "name": "Kathmandu (Nepal)",
+    "lat": 27.7048,
+    "lon": 85.3075,
+    "group": "South Asia"
+  },
+  {
+    "name": "Lahore (Pakistan)",
+    "lat": 31.588,
+    "lon": 74.309,
+    "group": "South Asia"
+  },
+  {
+    "name": "Karachi (Pakistan)",
+    "lat": 24.8615,
+    "lon": 67.0098,
+    "group": "South Asia"
+  },
+  {
+    "name": "Yerevan (Armenia)",
+    "lat": 40.1776,
+    "lon": 44.5126,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Baku (Azerbaijan)",
+    "lat": 40.3671,
+    "lon": 49.8358,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Tbilisi (Georgia)",
+    "lat": 41.6934,
+    "lon": 44.8014,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Tehran (Iran)",
+    "lat": 35.6997,
+    "lon": 51.338,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Isfahan (Iran)",
+    "lat": 32.6572,
+    "lon": 51.6777,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Western Wall, Jerusalem",
+    "lat": 31.7767,
+    "lon": 35.2345,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Carmel Market, Tel Aviv",
+    "lat": 32.0683,
+    "lon": 34.7695,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Amman (Jordan)",
+    "lat": 31.9535,
+    "lon": 35.929,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Almaty (Kazakhstan)",
+    "lat": 43.2588,
+    "lon": 76.9455,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Beirut (Lebanon)",
+    "lat": 33.8963,
+    "lon": 35.5017,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Doha (Qatar)",
+    "lat": 25.2868,
+    "lon": 51.5324,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Riyadh (Saudi Arabia)",
+    "lat": 24.7114,
+    "lon": 46.6742,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Jeddah (Saudi Arabia)",
+    "lat": 21.4858,
+    "lon": 39.1925,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Damascus (Syria)",
+    "lat": 33.5115,
+    "lon": 36.3067,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Hagia Sophia, Istanbul",
+    "lat": 41.0086,
+    "lon": 28.9802,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Grand Bazaar, Istanbul",
+    "lat": 41.0106,
+    "lon": 28.968,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Galata Tower, Istanbul",
+    "lat": 41.0256,
+    "lon": 28.9744,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Ankara (Turkey)",
+    "lat": 39.9208,
+    "lon": 32.8541,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Burj Khalifa, Dubai",
+    "lat": 25.1972,
+    "lon": 55.2744,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Dubai Marina",
+    "lat": 25.0805,
+    "lon": 55.1403,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Abu Dhabi (UAE)",
+    "lat": 24.4128,
+    "lon": 54.4749,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Tashkent (Uzbekistan)",
+    "lat": 41.3114,
+    "lon": 69.2796,
+    "group": "Middle East and Central Asia"
+  },
+  {
+    "name": "Algiers (Algeria)",
+    "lat": 36.7795,
+    "lon": 3.0583,
+    "group": "Africa"
+  },
+  {
+    "name": "Tahrir Square, Cairo",
+    "lat": 30.0444,
+    "lon": 31.2357,
+    "group": "Africa"
+  },
+  {
+    "name": "Cairo (Egypt)",
+    "lat": 30.0477,
+    "lon": 31.2624,
+    "group": "Africa"
+  },
+  {
+    "name": "Alexandria (Egypt)",
+    "lat": 31.2139,
+    "lon": 29.8856,
+    "group": "Africa"
+  },
+  {
+    "name": "Addis Ababa (Ethiopia)",
+    "lat": 9.0107,
+    "lon": 38.7613,
+    "group": "Africa"
+  },
+  {
+    "name": "Accra (Ghana)",
+    "lat": 5.5557,
+    "lon": -0.2003,
+    "group": "Africa"
+  },
+  {
+    "name": "Nairobi (Kenya)",
+    "lat": -1.2854,
+    "lon": 36.8219,
+    "group": "Africa"
+  },
+  {
+    "name": "Jemaa el-Fnaa, Marrakech",
+    "lat": 31.6258,
+    "lon": -7.9891,
+    "group": "Africa"
+  },
+  {
+    "name": "Casablanca (Morocco)",
+    "lat": 33.6083,
+    "lon": -7.6328,
+    "group": "Africa"
+  },
+  {
+    "name": "Rabat (Morocco)",
+    "lat": 34.0254,
+    "lon": -6.8226,
+    "group": "Africa"
+  },
+  {
+    "name": "Lagos (Nigeria)",
+    "lat": 6.4538,
+    "lon": 3.3946,
+    "group": "Africa"
+  },
+  {
+    "name": "Dakar (Senegal)",
+    "lat": 14.6703,
+    "lon": -17.4345,
+    "group": "Africa"
+  },
+  {
+    "name": "V&A Waterfront, Cape Town",
+    "lat": -33.9036,
+    "lon": 18.42,
+    "group": "Africa"
+  },
+  {
+    "name": "Johannesburg (South Africa)",
+    "lat": -26.1074,
+    "lon": 28.0567,
+    "group": "Africa"
+  },
+  {
+    "name": "Tunis (Tunisia)",
+    "lat": 36.7998,
+    "lon": 10.1812,
+    "group": "Africa"
+  },
+  {
+    "name": "St. Stephen's Cathedral, Vienna",
+    "lat": 48.2085,
+    "lon": 16.3731,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Vienna (Austria)",
+    "lat": 48.2108,
+    "lon": 16.3525,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Brussels (Belgium)",
+    "lat": 50.8467,
+    "lon": 4.3525,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Eiffel Tower, Paris",
+    "lat": 48.8584,
+    "lon": 2.2945,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Champs-Elysees, Paris",
+    "lat": 48.8704,
+    "lon": 2.3076,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Arc de Triomphe, Paris",
+    "lat": 48.8738,
+    "lon": 2.295,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Notre-Dame, Paris",
+    "lat": 48.853,
+    "lon": 2.3499,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Louvre Pyramid, Paris",
+    "lat": 48.8606,
+    "lon": 2.3376,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Montmartre Sacre-Coeur, Paris",
+    "lat": 48.8867,
+    "lon": 2.3431,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Le Marais, Paris",
+    "lat": 48.8564,
+    "lon": 2.3611,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Opera Garnier, Paris",
+    "lat": 48.8719,
+    "lon": 2.3316,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Lyon (France)",
+    "lat": 45.7578,
+    "lon": 4.832,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Marseille (France)",
+    "lat": 43.2956,
+    "lon": 5.3745,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Nice (France)",
+    "lat": 43.6963,
+    "lon": 7.2772,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Brandenburg Gate, Berlin",
+    "lat": 52.5163,
+    "lon": 13.3777,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Alexanderplatz, Berlin",
+    "lat": 52.5208,
+    "lon": 13.4095,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Marienplatz, Munich",
+    "lat": 48.1374,
+    "lon": 11.5755,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Hamburg (Germany)",
+    "lat": 53.5508,
+    "lon": 9.9925,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Munich (Germany)",
+    "lat": 48.1394,
+    "lon": 11.5654,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Frankfurt (Germany)",
+    "lat": 50.11,
+    "lon": 8.6821,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Cologne (Germany)",
+    "lat": 50.9413,
+    "lon": 6.9583,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Temple Bar, Dublin",
+    "lat": 53.3454,
+    "lon": -6.2636,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Dublin (Ireland)",
+    "lat": 53.3498,
+    "lon": -6.2603,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Luxembourg City (Luxembourg)",
+    "lat": 49.6117,
+    "lon": 6.13,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Dam Square, Amsterdam",
+    "lat": 52.3731,
+    "lon": 4.8932,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Amsterdam Centraal",
+    "lat": 52.3791,
+    "lon": 4.9003,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Bahnhofstrasse, Zurich",
+    "lat": 47.3715,
+    "lon": 8.5395,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Bern (Switzerland)",
+    "lat": 46.9481,
+    "lon": 7.4474,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Tower Bridge, London",
+    "lat": 51.5055,
+    "lon": -0.0754,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Big Ben, London",
+    "lat": 51.5007,
+    "lon": -0.1246,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Piccadilly Circus, London",
+    "lat": 51.51,
+    "lon": -0.1347,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Trafalgar Square, London",
+    "lat": 51.508,
+    "lon": -0.1281,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Abbey Road Crossing, London",
+    "lat": 51.532,
+    "lon": -0.1777,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Camden Market, London",
+    "lat": 51.5415,
+    "lon": -0.1466,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Covent Garden, London",
+    "lat": 51.5117,
+    "lon": -0.124,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Oxford Circus, London",
+    "lat": 51.5152,
+    "lon": -0.1419,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Borough Market, London",
+    "lat": 51.5055,
+    "lon": -0.0909,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Royal Mile, Edinburgh",
+    "lat": 55.9494,
+    "lon": -3.191,
+    "group": "Western Europe"
+  },
+  {
+    "name": "Stradun, Dubrovnik",
+    "lat": 42.6411,
+    "lon": 18.1094,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Zagreb (Croatia)",
+    "lat": 45.8131,
+    "lon": 15.9776,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Acropolis, Athens",
+    "lat": 37.9715,
+    "lon": 23.7257,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Plaka, Athens",
+    "lat": 37.973,
+    "lon": 23.73,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Oia, Santorini",
+    "lat": 36.4618,
+    "lon": 25.3753,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Athens (Greece)",
+    "lat": 37.9755,
+    "lon": 23.7348,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "St Mark's Square, Venice",
+    "lat": 45.434,
+    "lon": 12.3388,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Rialto Bridge, Venice",
+    "lat": 45.438,
+    "lon": 12.3359,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Burano, Venice",
+    "lat": 45.4854,
+    "lon": 12.4166,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Colosseum, Rome",
+    "lat": 41.8902,
+    "lon": 12.4922,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Trevi Fountain, Rome",
+    "lat": 41.9009,
+    "lon": 12.4833,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Pantheon, Rome",
+    "lat": 41.8986,
+    "lon": 12.4769,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Spanish Steps, Rome",
+    "lat": 41.906,
+    "lon": 12.4828,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Piazza Navona, Rome",
+    "lat": 41.8992,
+    "lon": 12.4731,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Florence Duomo",
+    "lat": 43.7731,
+    "lon": 11.256,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Ponte Vecchio, Florence",
+    "lat": 43.768,
+    "lon": 11.2531,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Milan Duomo",
+    "lat": 45.4642,
+    "lon": 9.19,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Galleria Vittorio Emanuele II, Milan",
+    "lat": 45.4658,
+    "lon": 9.19,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Naples (Italy)",
+    "lat": 40.8359,
+    "lon": 14.2488,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Bologna (Italy)",
+    "lat": 44.4938,
+    "lon": 11.3428,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Praca do Comercio, Lisbon",
+    "lat": 38.7075,
+    "lon": -9.1365,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Alfama, Lisbon",
+    "lat": 38.711,
+    "lon": -9.13,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Lisbon (Portugal)",
+    "lat": 38.7139,
+    "lon": -9.1394,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Sagrada Familia, Barcelona",
+    "lat": 41.4036,
+    "lon": 2.1744,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "La Rambla, Barcelona",
+    "lat": 41.3809,
+    "lon": 2.1734,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Park Guell, Barcelona",
+    "lat": 41.4145,
+    "lon": 2.1527,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Puerta del Sol, Madrid",
+    "lat": 40.4169,
+    "lon": -3.7035,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Gran Via, Madrid",
+    "lat": 40.4203,
+    "lon": -3.7058,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Madrid (Spain)",
+    "lat": 40.4155,
+    "lon": -3.7074,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Seville (Spain)",
+    "lat": 37.3772,
+    "lon": -5.9868,
+    "group": "Southern Europe"
+  },
+  {
+    "name": "Sofia (Bulgaria)",
+    "lat": 42.6955,
+    "lon": 23.3322,
+    "group": "Central and Eastern Europe"
+  },
+  {
+    "name": "Old Town Square, Prague",
+    "lat": 50.0875,
+    "lon": 14.4213,
+    "group": "Central and Eastern Europe"
+  },
+  {
+    "name": "Charles Bridge, Prague",
+    "lat": 50.0865,
+    "lon": 14.4114,
+    "group": "Central and Eastern Europe"
+  },
+  {
+    "name": "Prague (Czech Republic)",
+    "lat": 50.0813,
+    "lon": 14.4262,
+    "group": "Central and Eastern Europe"
+  },
+  {
+    "name": "Hungarian Parliament, Budapest",
+    "lat": 47.5074,
+    "lon": 19.0455,
+    "group": "Central and Eastern Europe"
+  },
+  {
+    "name": "Budapest (Hungary)",
+    "lat": 47.4966,
+    "lon": 19.055,
+    "group": "Central and Eastern Europe"
+  },
+  {
+    "name": "Kraków (Poland)",
+    "lat": 50.0616,
+    "lon": 19.9372,
+    "group": "Central and Eastern Europe"
+  },
+  {
+    "name": "Warsaw (Poland)",
+    "lat": 52.2497,
+    "lon": 21.0122,
+    "group": "Central and Eastern Europe"
+  },
+  {
+    "name": "Bucharest (Romania)",
+    "lat": 44.4355,
+    "lon": 26.1023,
+    "group": "Central and Eastern Europe"
+  },
+  {
+    "name": "Red Square, Moscow",
+    "lat": 55.7539,
+    "lon": 37.6208,
+    "group": "Central and Eastern Europe"
+  },
+  {
+    "name": "Palace Square, Saint Petersburg",
+    "lat": 59.9398,
+    "lon": 30.3146,
+    "group": "Central and Eastern Europe"
+  },
+  {
+    "name": "Belgrade (Serbia)",
+    "lat": 44.8178,
+    "lon": 20.459,
+    "group": "Central and Eastern Europe"
+  },
+  {
+    "name": "Bratislava (Slovakia)",
+    "lat": 48.1436,
+    "lon": 17.1077,
+    "group": "Central and Eastern Europe"
+  },
+  {
+    "name": "Kyiv (Ukraine)",
+    "lat": 50.4501,
+    "lon": 30.5234,
+    "group": "Central and Eastern Europe"
+  },
+  {
+    "name": "Nyhavn, Copenhagen",
+    "lat": 55.6796,
+    "lon": 12.5912,
+    "group": "Northern Europe"
+  },
+  {
+    "name": "Copenhagen (Denmark)",
+    "lat": 55.6761,
+    "lon": 12.5683,
+    "group": "Northern Europe"
+  },
+  {
+    "name": "Tallinn (Estonia)",
+    "lat": 59.437,
+    "lon": 24.7454,
+    "group": "Northern Europe"
+  },
+  {
+    "name": "Helsinki Market Square",
+    "lat": 60.1674,
+    "lon": 24.9536,
+    "group": "Northern Europe"
+  },
+  {
+    "name": "Helsinki (Finland)",
+    "lat": 60.1695,
+    "lon": 24.9523,
+    "group": "Northern Europe"
+  },
+  {
+    "name": "Reykjavík (Iceland)",
+    "lat": 64.1417,
+    "lon": -21.9269,
+    "group": "Northern Europe"
+  },
+  {
+    "name": "Riga (Latvia)",
+    "lat": 56.9477,
+    "lon": 24.1055,
+    "group": "Northern Europe"
+  },
+  {
+    "name": "Vilnius (Lithuania)",
+    "lat": 54.6797,
+    "lon": 25.2868,
+    "group": "Northern Europe"
+  },
+  {
+    "name": "Oslo (Norway)",
+    "lat": 59.9135,
+    "lon": 10.7522,
+    "group": "Northern Europe"
+  },
+  {
+    "name": "Gamla Stan, Stockholm",
+    "lat": 59.3251,
+    "lon": 18.0711,
+    "group": "Northern Europe"
+  },
+  {
+    "name": "Stockholm (Sweden)",
+    "lat": 59.3326,
+    "lon": 18.0649,
+    "group": "Northern Europe"
+  },
+  {
+    "name": "Times Square, New York",
+    "lat": 40.758,
+    "lon": -73.9855,
+    "group": "United States"
+  },
+  {
+    "name": "Empire State Building, New York",
+    "lat": 40.7484,
+    "lon": -73.9857,
+    "group": "United States"
+  },
+  {
+    "name": "Grand Central Terminal, New York",
+    "lat": 40.7527,
+    "lon": -73.9772,
+    "group": "United States"
+  },
+  {
+    "name": "Brooklyn Bridge, New York",
+    "lat": 40.7061,
+    "lon": -73.9969,
+    "group": "United States"
+  },
+  {
+    "name": "Bethesda Fountain, Central Park, New York",
+    "lat": 40.7747,
+    "lon": -73.9712,
+    "group": "United States"
+  },
+  {
+    "name": "Wall Street, New York",
+    "lat": 40.7063,
+    "lon": -74.009,
+    "group": "United States"
+  },
+  {
+    "name": "Chinatown, New York",
+    "lat": 40.7158,
+    "lon": -73.997,
+    "group": "United States"
+  },
+  {
+    "name": "Flatiron Building, New York",
+    "lat": 40.7411,
+    "lon": -73.9897,
+    "group": "United States"
+  },
+  {
+    "name": "The Vessel, Hudson Yards, New York",
+    "lat": 40.753,
+    "lon": -74.0022,
+    "group": "United States"
+  },
+  {
+    "name": "Golden Gate Bridge, San Francisco",
+    "lat": 37.8199,
+    "lon": -122.4783,
+    "group": "United States"
+  },
+  {
+    "name": "Lombard Street, San Francisco",
+    "lat": 37.8021,
+    "lon": -122.4187,
+    "group": "United States"
+  },
+  {
+    "name": "Grant Avenue, San Francisco Chinatown",
+    "lat": 37.7941,
+    "lon": -122.4078,
+    "group": "United States"
+  },
+  {
+    "name": "Ferry Building, San Francisco",
+    "lat": 37.7955,
+    "lon": -122.3937,
+    "group": "United States"
+  },
+  {
+    "name": "Haight-Ashbury, San Francisco",
+    "lat": 37.7692,
+    "lon": -122.4481,
+    "group": "United States"
+  },
+  {
+    "name": "Union Square, San Francisco",
+    "lat": 37.7879,
+    "lon": -122.4074,
+    "group": "United States"
+  },
+  {
+    "name": "Cloud Gate (The Bean), Chicago",
+    "lat": 41.8827,
+    "lon": -87.6233,
+    "group": "United States"
+  },
+  {
+    "name": "Michigan Avenue, Chicago",
+    "lat": 41.8836,
+    "lon": -87.6244,
+    "group": "United States"
+  },
+  {
+    "name": "Hollywood Walk of Fame, Los Angeles",
+    "lat": 34.1016,
+    "lon": -118.3267,
+    "group": "United States"
+  },
+  {
+    "name": "Pershing Square, Los Angeles",
+    "lat": 34.0479,
+    "lon": -118.2583,
+    "group": "United States"
+  },
+  {
+    "name": "Venice Beach Boardwalk, Los Angeles",
+    "lat": 33.985,
+    "lon": -118.4695,
+    "group": "United States"
+  },
+  {
+    "name": "The Strip, Las Vegas",
+    "lat": 36.1126,
+    "lon": -115.1767,
+    "group": "United States"
+  },
+  {
+    "name": "Ocean Drive, Miami Beach",
+    "lat": 25.7817,
+    "lon": -80.13,
+    "group": "United States"
+  },
+  {
+    "name": "Bourbon Street, New Orleans",
+    "lat": 29.9584,
+    "lon": -90.0654,
+    "group": "United States"
+  },
+  {
+    "name": "Pike Place Market, Seattle",
+    "lat": 47.6097,
+    "lon": -122.3422,
+    "group": "United States"
+  },
+  {
+    "name": "Faneuil Hall, Boston",
+    "lat": 42.36,
+    "lon": -71.0566,
+    "group": "United States"
+  },
+  {
+    "name": "National Mall, Washington DC",
+    "lat": 38.8899,
+    "lon": -77.0091,
+    "group": "United States"
+  },
+  {
+    "name": "Houston (USA)",
+    "lat": 29.7528,
+    "lon": -95.3583,
+    "group": "United States"
+  },
+  {
+    "name": "Phoenix (USA)",
+    "lat": 33.4484,
+    "lon": -112.074,
+    "group": "United States"
+  },
+  {
+    "name": "Philadelphia (USA)",
+    "lat": 39.9496,
+    "lon": -75.1503,
+    "group": "United States"
+  },
+  {
+    "name": "San Antonio (USA)",
+    "lat": 29.426,
+    "lon": -98.4861,
+    "group": "United States"
+  },
+  {
+    "name": "Atlanta (USA)",
+    "lat": 33.7605,
+    "lon": -84.3931,
+    "group": "United States"
+  },
+  {
+    "name": "Austin (USA)",
+    "lat": 30.2747,
+    "lon": -97.7405,
+    "group": "United States"
+  },
+  {
+    "name": "Portland (USA)",
+    "lat": 45.5188,
+    "lon": -122.6793,
+    "group": "United States"
+  },
+  {
+    "name": "San Diego (USA)",
+    "lat": 32.7134,
+    "lon": -117.1611,
+    "group": "United States"
+  },
+  {
+    "name": "Detroit (USA)",
+    "lat": 42.3319,
+    "lon": -83.0475,
+    "group": "United States"
+  },
+  {
+    "name": "CN Tower, Toronto",
+    "lat": 43.6426,
+    "lon": -79.3871,
+    "group": "Canada, Mexico and the Caribbean"
+  },
+  {
+    "name": "Gastown Steam Clock, Vancouver",
+    "lat": 49.2846,
+    "lon": -123.1085,
+    "group": "Canada, Mexico and the Caribbean"
+  },
+  {
+    "name": "Old Port, Montreal",
+    "lat": 45.5071,
+    "lon": -73.5535,
+    "group": "Canada, Mexico and the Caribbean"
+  },
+  {
+    "name": "Toronto (Canada)",
+    "lat": 43.6561,
+    "lon": -79.3802,
+    "group": "Canada, Mexico and the Caribbean"
+  },
+  {
+    "name": "Montréal (Canada)",
+    "lat": 45.5088,
+    "lon": -73.5543,
+    "group": "Canada, Mexico and the Caribbean"
+  },
+  {
+    "name": "Ottawa (Canada)",
+    "lat": 45.4236,
+    "lon": -75.7009,
+    "group": "Canada, Mexico and the Caribbean"
+  },
+  {
+    "name": "Havana (Cuba)",
+    "lat": 23.1388,
+    "lon": -82.3517,
+    "group": "Canada, Mexico and the Caribbean"
+  },
+  {
+    "name": "Santo Domingo (Dominican Republic)",
+    "lat": 18.4726,
+    "lon": -69.8912,
+    "group": "Canada, Mexico and the Caribbean"
+  },
+  {
+    "name": "Guatemala City (Guatemala)",
+    "lat": 14.6411,
+    "lon": -90.5133,
+    "group": "Canada, Mexico and the Caribbean"
+  },
+  {
+    "name": "Zocalo, Mexico City",
+    "lat": 19.4326,
+    "lon": -99.1332,
+    "group": "Canada, Mexico and the Caribbean"
+  },
+  {
+    "name": "Caminito, Buenos Aires",
+    "lat": -34.6387,
+    "lon": -58.3631,
+    "group": "South America"
+  },
+  {
+    "name": "Buenos Aires (Argentina)",
+    "lat": -34.6083,
+    "lon": -58.3712,
+    "group": "South America"
+  },
+  {
+    "name": "Córdoba (Argentina)",
+    "lat": -31.417,
+    "lon": -64.1883,
+    "group": "South America"
+  },
+  {
+    "name": "La Paz (Bolivia)",
+    "lat": -16.4955,
+    "lon": -68.1336,
+    "group": "South America"
+  },
+  {
+    "name": "Copacabana Beach, Rio de Janeiro",
+    "lat": -22.9711,
+    "lon": -43.1822,
+    "group": "South America"
+  },
+  {
+    "name": "Avenida Paulista, Sao Paulo",
+    "lat": -23.5614,
+    "lon": -46.6559,
+    "group": "South America"
+  },
+  {
+    "name": "São Paulo (Brazil)",
+    "lat": -23.5505,
+    "lon": -46.6333,
+    "group": "South America"
+  },
+  {
+    "name": "Rio de Janeiro (Brazil)",
+    "lat": -22.9148,
+    "lon": -43.1791,
+    "group": "South America"
+  },
+  {
+    "name": "Brasília (Brazil)",
+    "lat": -15.7993,
+    "lon": -47.8643,
+    "group": "South America"
+  },
+  {
+    "name": "Santiago (Chile)",
+    "lat": -33.4378,
+    "lon": -70.6504,
+    "group": "South America"
+  },
+  {
+    "name": "Bogotá (Colombia)",
+    "lat": 4.5981,
+    "lon": -74.0758,
+    "group": "South America"
+  },
+  {
+    "name": "Medellín (Colombia)",
+    "lat": 6.2552,
+    "lon": -75.5734,
+    "group": "South America"
+  },
+  {
+    "name": "Cartagena (Colombia)",
+    "lat": 10.4227,
+    "lon": -75.5485,
+    "group": "South America"
+  },
+  {
+    "name": "Quito (Ecuador)",
+    "lat": -0.2201,
+    "lon": -78.5124,
+    "group": "South America"
+  },
+  {
+    "name": "Lima (Peru)",
+    "lat": -12.0464,
+    "lon": -77.03,
+    "group": "South America"
+  },
+  {
+    "name": "Montevideo (Uruguay)",
+    "lat": -34.9056,
+    "lon": -56.2011,
+    "group": "South America"
+  },
+  {
+    "name": "Caracas (Venezuela)",
+    "lat": 10.5068,
+    "lon": -66.9146,
+    "group": "South America"
+  },
+  {
+    "name": "Sydney Opera House",
+    "lat": -33.8568,
+    "lon": 151.2153,
+    "group": "Oceania"
+  },
+  {
+    "name": "Sydney Harbour Bridge",
+    "lat": -33.8523,
+    "lon": 151.2108,
+    "group": "Oceania"
+  },
+  {
+    "name": "Hosier Lane, Melbourne",
+    "lat": -37.8167,
+    "lon": 144.9667,
+    "group": "Oceania"
+  },
+  {
+    "name": "Federation Square, Melbourne",
+    "lat": -37.8179,
+    "lon": 144.9691,
+    "group": "Oceania"
+  },
+  {
+    "name": "Sydney (Australia)",
+    "lat": -33.8687,
+    "lon": 151.2093,
+    "group": "Oceania"
+  },
+  {
+    "name": "Melbourne (Australia)",
+    "lat": -37.8183,
+    "lon": 144.9671,
+    "group": "Oceania"
+  },
+  {
+    "name": "Canberra (Australia)",
+    "lat": -35.3082,
+    "lon": 149.1245,
+    "group": "Oceania"
+  },
+  {
+    "name": "Sky Tower, Auckland",
+    "lat": -36.8485,
+    "lon": 174.7633,
+    "group": "Oceania"
+  },
+  {
+    "name": "Wellington (New Zealand)",
+    "lat": -41.2915,
+    "lon": 174.7765,
+    "group": "Oceania"
+  }
+]

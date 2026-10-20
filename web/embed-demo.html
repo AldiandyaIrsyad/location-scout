@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Embed Demo</title>
+  <style>
+    body { margin: 0; font: 14px system-ui, sans-serif; background: #f4f4f4; color: #222; display: grid; grid-template-columns: 1fr 320px; height: 100vh; }
+    iframe { width: 100%; height: 100%; border: 0; }
+    aside { padding: 12px; overflow: auto; border-left: 1px solid #ccc; background: #fff; }
+    pre { white-space: pre-wrap; word-break: break-all; font-size: 11px; background: #f0f0f0; padding: 6px; }
+    img { max-width: 100%; border: 1px solid #ccc; }
+    button, select { margin: 2px 0; }
+  </style>
+</head>
+<body>
+  <!-- A minimal host page that embeds Panelscape and listens for its embed API messages. -->
+  <iframe id="scout" src="index.html?tok=demo1#ll=35.659500,139.700500&s=200&far=0&n=Shibuya+Crossing%2C+Tokyo"></iframe>
+  <aside>
+    <h3>Host (embed demo)</h3>
+    <p>Drop a pin in the 3D view, then press “✎ Use this spot as the background”.</p>
+    <select id="lang"><option value="en">English</option><option value="ja">日本語</option><option value="fr">Français</option></select>
+    <button id="render">Request a render</button>
+    <button id="load">Load Kyoto (Hanamikoji)</button>
+    <h4>Last pick</h4><pre id="pick">—</pre>
+    <h4>Last render</h4><img id="img" alt="" />
+    <h4>Messages</h4><pre id="log"></pre>
+  </aside>
+  <script>
+    const frame = document.getElementById('scout');
+    const send = (m) => frame.contentWindow.postMessage(m, '*');
+    let n = 0;
+    window.addEventListener('message', (e) => {
+      if (e.source !== frame.contentWindow || !e.data || e.data.app !== 'panelscape') return;
+      const d = e.data;
+      document.getElementById('log').textContent = `${d.type}${d.tok ? ' (tok ' + d.tok + ')' : ''}\n` + document.getElementById('log').textContent;
+      if (d.type === 'pick') document.getElementById('pick').textContent = JSON.stringify(d.recipe, null, 1);
+      if (d.type === 'rendered' && d.url) document.getElementById('img').src = d.url;
+    });
+    document.getElementById('lang').onchange = (e) => send({ type: 'lang', lang: e.target.value });
+    document.getElementById('render').onclick = () => send({ type: 'render', id: ++n, longSide: 800 });
+    document.getElementById('load').onclick = () => send({ type: 'load', lat: 35.0037, lon: 135.7752, size: 200, name: 'Hanamikoji, Gion, Kyoto' });
+  </script>
+</body>
+</html>

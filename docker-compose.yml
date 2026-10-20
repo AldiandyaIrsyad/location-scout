@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    image: panelscape
+    ports:
+      - "8080:8080"
+    volumes:
+      - cache:/data
+    restart: unless-stopped
+
+volumes:
+  cache:

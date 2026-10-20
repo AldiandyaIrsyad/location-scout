@@ -1,0 +1,31 @@
+# Production stack for the Oracle VPS. The shared Caddy (obsidian-server project) terminates TLS and
+# reaches this container by name over its network; 8080 is only bound to localhost for debugging.
+#   docker compose -f deploy/docker-compose.prod.yml up -d --build
+name: panelscape
+
+services:
+  app:
+    build: ..
+    image: panelscape
+    container_name: panelscape
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      - LOG_LEVEL=info
+      # Map and elevation data barely change; keep the warmed preset spots for a year.
+      - OSM_TTL=8760h
+      - TILE_TTL=8760h
+    volumes:
+      - cache:/data
+    networks:
+      - default
+      - proxy
+    restart: unless-stopped
+
+volumes:
+  cache:
+
+networks:
+  proxy:
+    external: true
+    name: obsidian-server_default

@@ -1,0 +1,4 @@
+# build output and runtime cache
+bin/
+data/
+*.tmp

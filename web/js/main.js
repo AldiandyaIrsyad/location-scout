@@ -11,6 +11,7 @@ import { loadPlaces, searchPlaces } from './places.js';
 import { FORMATS, makeFile, suggestedName, prepareSave, commitSave, chooseFolder, currentFolder, supportsFolders } from './save.js';
 import { initPresets, PRESETS } from './presets.js';
 import { initEffectsUI } from './effects-ui.js';
+import { initWorld } from './world.js';
 import { t, initI18n, setLang } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
@@ -125,7 +126,7 @@ function updateMapCamera() {
 }
 
 // ---------------------------------------------------------------------------
-// URL hash: #ll=lat,lon&s=300&far=2&n=Name&st=style&lens=32&cam=x,y,z,yaw,pitch,dist
+// URL hash: #ll=lat,lon&s=300&far=2&n=Name&st=style&lens=32&w=world-settings&cam=x,y,z,yaw,pitch,dist
 function readHash() {
   const h = new URLSearchParams(location.hash.slice(1));
   if (h.get('ll')) {
@@ -137,6 +138,7 @@ function readHash() {
   if (h.get('n') !== null) state.name = h.get('n');
   if (h.get('st')) state.style = h.get('st');
   if (h.get('lens')) state.lens = Number(h.get('lens')) || 32;
+  world.fromString(h.get('w') || '');
   if (h.get('cam')) {
     const c = h.get('cam').split(',').map(Number);
     if (c.length === 6 && c.every(isFinite)) state.pendingView = { kind: 'pose', x: c[0], y: c[1], z: c[2], yaw: c[3], pitch: c[4], dist: c[5] };
@@ -154,6 +156,8 @@ function hashString() {
   p.set('n', state.name || '');
   p.set('st', state.style);
   p.set('lens', state.lens);
+  const w = world.toString();
+  if (w) p.set('w', w);
   if (state.city) {
     const pose = rig.getPose();
     const e = pose.position;
@@ -442,13 +446,12 @@ function readOptions() {
     season: $('season').value,
     treeStyle: $('treeStyle').value,
     leafEdge: $('leafEdge').value,
-    treeType: $('treeType').value,
-    treeSize: $('treeSize').value,
-    people: $('people').value,
-    cars: $('cars').value,
+    ...world.read(),
     twoSidedShadows: $('shadowSide').value === 'double',
   };
 }
+// World settings panel (people, cars, trees, street details); kept in the share link
+const world = initWorld({ onChange: () => { applyOptions(); scheduleHash(); } });
 function applyOptions() {
   renderer.setOptions(readOptions());
   renderer.applyCameraPose(rig.getPose());
@@ -558,7 +561,7 @@ $('recenterBtn').addEventListener('click', () => {
   Object.assign(state, { lat, lon, name: `${lat.toFixed(5)}, ${lon.toFixed(5)}` });
   build();
 });
-for (const id of ['optStraight', 'optShadows', 'optWindows', 'optTerrain', 'optTrees', 'optDetails', 'optLowPoly', 'season', 'treeStyle', 'leafEdge', 'treeType', 'treeSize', 'people', 'cars']) {
+for (const id of ['optStraight', 'optShadows', 'optWindows', 'optTerrain', 'optTrees', 'optDetails', 'optLowPoly', 'season', 'treeStyle', 'leafEdge']) {
   $(id).addEventListener('change', applyOptions);
 }
 bindRange('detailDist', (v) => `${Math.round(v * 100)}%`, () => { savePref('detailDist'); applyOptions(); });
@@ -792,6 +795,7 @@ window.addEventListener('hashchange', () => {
   syncControls();
   setStyle(state.style);
   renderer.setLens(state.lens);
+  renderer.setOptions(readOptions());
   build();
 });
 
@@ -833,7 +837,7 @@ if (EMBED) {
       style: state.style, lens: state.lens, rot: +pose.yaw.toFixed(4),
       pin: state.pin.map((v) => +v.toFixed(2)),
       camera: { position: pose.position.toArray().map((v) => +v.toFixed(2)), yaw: +pose.yaw.toFixed(4), pitch: +pose.pitch.toFixed(4) },
-      options: { terrain: $('optTerrain').checked, trees: $('optTrees').checked, details: $('optDetails').checked, season: $('season').value, people: $('people').value, cars: $('cars').value },
+      options: { terrain: $('optTerrain').checked, trees: $('optTrees').checked, details: $('optDetails').checked, season: $('season').value, ...world.read() },
       name: String(state.name || '').slice(0, 80),
       link: location.href.split('#')[0] + hashString(),
     };

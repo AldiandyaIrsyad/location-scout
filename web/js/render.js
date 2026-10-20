@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { sampleHeight } from './elevation.js';
 import { EffectStack } from './effects.js';
+import { landmarksFor } from './landmarks.js';
 
 const DEG = Math.PI / 180;
 const UP = [0, 1, 0];
@@ -92,15 +93,66 @@ const ROOFS = ['#8e5a48', '#6f6a68', '#5d6f8a', '#a4614a', '#5f5a55'];
 
 // Crown colours per season (instance colours are picked from these with jitter)
 const SEASON_CROWN = {
-  spring: ['#f7b6cc', '#b9dd7c', '#e7a0bd', '#cfe68f'],
-  summer: ['#4f9d35', '#66b23f', '#3f8a32', '#78bf48'],
-  autumn: ['#e2822c', '#c4481f', '#e0a23a', '#b23a22'],
+  spring: ['#f7b6cc', '#b9dd7c', '#e7a0bd', '#cfe68f', '#f2c6d6', '#a8d56e', '#fbe5ea', '#d8ec9c'],
+  summer: ['#4f9d35', '#66b23f', '#3f8a32', '#78bf48', '#5aa83a', '#2f7a3a', '#8fc34e', '#3e9a4f'],
+  autumn: ['#e2822c', '#c4481f', '#e0a23a', '#b23a22', '#d9a02a', '#a8321e', '#cf6a24', '#8a3a1d'],
   winter: null,
 };
+// A few trees in every season stand out (flowering, yellowing, dark), picked at random.
+const ACCENT_CROWN = {
+  spring: ['#ffffff', '#f4eef0', '#f08fb0', '#e8d96a'],
+  summer: ['#9bc53d', '#2c6e46', '#b5cf4a', '#1f5f3a'],
+  autumn: ['#f0c23a', '#7a2a1a', '#e9e2a0', '#5b7a2a'],
+};
+// Vertical gradient baked into crown vertex colours (multiplies the instance colour): shaded and cooler
+// underneath, light and warmer on top.
+const CROWN_TINT = {
+  summer: { bottom: [0.5, 0.64, 0.58], top: [1, 1, 0.8] },
+  spring: { bottom: [0.8, 0.76, 0.8], top: [1, 1, 0.9] },
+  autumn: { bottom: [0.74, 0.44, 0.4], top: [1, 0.96, 0.6] },
+};
+const CONIFER_TINT = { bottom: [0.5, 0.64, 0.6], top: [0.98, 1, 0.9] };
 
 // ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
+
+/** Smooth value noise in 3D, 0..1. */
+function valueNoise3(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const sm = (t) => t * t * (3 - 2 * t);
+  const fx = sm(x - xi), fy = sm(y - yi), fz = sm(z - zi);
+  const l = (a, b, t) => a + (b - a) * t;
+  const h = (a, b, c) => hash3(xi + a, yi + b, zi + c);
+  return l(
+    l(l(h(0, 0, 0), h(1, 0, 0), fx), l(h(0, 1, 0), h(1, 1, 0), fx), fy),
+    l(l(h(0, 0, 1), h(1, 0, 1), fx), l(h(0, 1, 1), h(1, 1, 1), fx), fy),
+    fz,
+  );
+}
+
+/**
+ * Writes a vertical gradient (bottom -> top over the geometry's height) and soft patchy variation into the
+ * vertex colours of a non-indexed geometry, so a crown is not one flat colour. Multiplies the instance colour.
+ */
+function tintGeometry(geo, tint, noiseAmp = 0.14) {
+  const pos = geo.attributes.position;
+  const c = geo.attributes.color;
+  if (!c || !tint) return geo;
+  geo.computeBoundingBox();
+  const y0 = geo.boundingBox.min.y, y1 = geo.boundingBox.max.y;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const t = clamp((y - y0) / Math.max(1e-6, y1 - y0), 0, 1);
+    const f = t * t * (3 - 2 * t);
+    const m = 1 - noiseAmp + 2 * noiseAmp * valueNoise3(x * 2.3, y * 2.3, z * 2.3);
+    for (let ch = 0; ch < 3; ch++) {
+      c.array[i * 3 + ch] = clamp((tint.bottom[ch] + (tint.top[ch] - tint.bottom[ch]) * f) * m, 0, 1);
+    }
+  }
+  c.needsUpdate = true;
+  return geo;
+}
 
 /** Linear mix of two #rrggbb colours (t = 0 gives a, t = 1 gives b). */
 function mixHex(a, b, t) {
@@ -1284,8 +1336,25 @@ export class CityRenderer {
       leafEdge: 'smooth',
       treeType: 'mixed',
       treeSize: 'normal',
-      people: 'none',
-      cars: 'none',
+      // World settings (what is in the scene); see web/js/world.js for the panel and the ranges.
+      peopleDensity: 0, // 0..100
+      walkShare: 75, standShare: 15, talkShare: 10, // relative weights of walkers / people standing / talking groups
+      groupSize: 4, // most people in one talking group (2..6)
+      kidsShare: 6, // % of people who are children
+      crossing: 50, // % of junctions with people on the crossing
+      gesture: 70, // % of talkers who gesture
+      carDensity: 0, // 0..100
+      carParked: 40, // % of cars parked at the curb
+      carQueue: 3, // most cars waiting at a red light
+      carTypes: 'sedan,compact,kei,suv,van,pickup,bus',
+      carPalette: 'realistic', // realistic | mono | colorful
+      trafficSide: 'auto', // auto | left | right
+      worldSeed: 0, // shuffles people and cars without moving the camera
+      treeDensity: 100, // % of the map's trees; above 100 adds street trees
+      treeMix: 'auto', // 'auto' picks the species from the climate, or 'round:60,conifer:25,...'
+      treeSizeMin: 0.95, treeSizeMax: 1.05,
+      landmarks: true, // replace famous landmarks with hand-built models (see landmarks.js)
+      detailPoles: true, detailSignals: true, detailRails: true, detailCrosswalks: true, detailTactile: true,
       straightVerticals: false,
       twoSidedShadows: false,
     };
@@ -1733,10 +1802,11 @@ export class CityRenderer {
    * Build extruded buildings. Walls and caps are generated directly as triangles
    * (no per-building meshes), then merged into two batches (walls / roofs).
    */
-  _buildBuildings(list, surroundings) {
+  _buildBuildings(list, surroundings, extra = null) {
     const lowPoly = this.options.lowPoly;
     const wallsB = new Batch();
     const roofsB = new Batch();
+    const plain = []; // vertex ranges of walls that get no window grid
     for (const b of list) {
       const outer = b.outer;
       if (!outer || outer.length < 3) continue;
@@ -1745,12 +1815,17 @@ export class CityRenderer {
 
       // ground under the footprint: centre drives the base, lowest corner extends the walls down
       const c = polyCentroid(outer);
-      const groundC = this.groundHeight(c[0], c[1]);
+      let groundC = this.groundHeight(c[0], c[1]);
       let groundMin = Infinity;
+      let groundMax = -Infinity;
       for (const p of outer) {
         const g = this.groundHeight(p[0], p[1]);
         if (g < groundMin) groundMin = g;
+        if (g > groundMax) groundMax = g;
       }
+      // on a slope the building stands on the high side (walls reach down to the low side), so no corner
+      // ends up buried; capped so one noisy elevation cell cannot lift it far
+      groundC = Math.max(groundC, Math.min(groundMax, groundC + 3));
       const minH = Math.max(0, b.minHeight || 0);
       const height = Math.max(b.height || 6, minH + 2);
       const flat = surroundings || lowPoly || !b.roofShape || b.roofShape === 'flat';
@@ -1766,20 +1841,32 @@ export class CityRenderer {
       const wc = colArr(hex).map((v) => clamp(v * mult, 0, 1));
       const rc = colArr(ROOFS[Math.floor(r() * ROOFS.length)]);
 
+      // monuments, steps, sheds and landmark bases are solid: no window grid on their walls
+      const solid = b.noWindows || NO_WINDOW_KINDS.has(b.kind);
+      const v0 = wallsB.p.length / 3;
       addWalls(wallsB, outer, holes, bottom, wallTop, wc);
-      if (!surroundings && this._segs) addWindowSegs(this._segs, outer, bottom, wallTop);
+      if (solid) plain.push([v0, wallsB.p.length / 3]);
+      else if (!surroundings && this._segs) addWindowSegs(this._segs, outer, bottom, wallTop);
       if (flat) {
         addCap(roofsB, outer, holes, topAbs, rc);
       } else {
         addRoof(roofsB, outer, wallTop, roofH, b.roofShape, rc);
       }
     }
+    // hand-built landmark models go in with the roofs (no window grid on a lattice tower)
+    if (extra) extra(roofsB, (x, y) => this.groundHeight(x, y));
     const walls = wallsB.toGeometry();
     // inner city walls get the window grid in the edge and lit / colour passes (aWin = 1 per vertex)
     if (walls && !surroundings) {
-      walls.setAttribute('aWin', new THREE.Float32BufferAttribute(new Float32Array(walls.attributes.position.count).fill(1), 1));
+      const win = new Float32Array(walls.attributes.position.count).fill(1);
+      for (const [a, z] of plain) win.fill(0, a, z);
+      walls.setAttribute('aWin', new THREE.Float32BufferAttribute(win, 1));
     }
-    return { walls, roofs: roofsB.toGeometry() };
+    // roofs (and the landmark models drawn with them) carry an explicit 0, so the window grid never
+    // shows on them whatever the GPU still holds from the walls mesh
+    const roofs = roofsB.toGeometry();
+    if (roofs && !surroundings) roofs.setAttribute('aWin', new THREE.Float32BufferAttribute(new Float32Array(roofs.attributes.position.count), 1));
+    return { walls, roofs };
   }
 
   _wallPick(b, r) {
@@ -1881,7 +1968,7 @@ export class CityRenderer {
         }
 
         // utility poles every ~30 m along residential-type streets
-        if (RESIDENTIAL_KINDS.has(e.kind)) {
+        if (RESIDENTIAL_KINDS.has(e.kind) && this.options.detailPoles !== false) {
           for (const s of samplePoly(path, 30, 15)) {
             const o = e.w / 2 + 0.8;
             const x = s.x + s.nx * o;
@@ -1897,19 +1984,19 @@ export class CityRenderer {
       // junctions: signals where a major road meets, a zebra crossing on every leg
       for (const j of findJunctions(entries)) {
         juncPts.push([j.x, j.y]);
-        if (j.signal) {
+        if (j.signal && this.options.detailSignals !== false) {
           const spot = this._signalSpot(j, j.roads, entries);
           furniture.push(...this._signalAt(spot.x, spot.y, spot.ax, spot.ay));
           this._lampPts.push([spot.x, spot.y, 5.5]); // junction lamp on the signal pole (night, lamps on)
         }
         for (const leg of j.legs) {
-          this._crosswalk(marks, leg.cx, leg.cy, leg.ux, leg.uy, leg.w, white);
-          if (japan) this._tactile(tact, leg.cx, leg.cy, leg.ux, leg.uy, leg.w, yellow);
+          if (this.options.detailCrosswalks !== false) this._crosswalk(marks, leg.cx, leg.cy, leg.ux, leg.uy, leg.w, white);
+          if (japan && this.options.detailTactile !== false) this._tactile(tact, leg.cx, leg.cy, leg.ux, leg.uy, leg.w, yellow);
         }
       }
     }
 
-    if (details) this._guardRails(entries, juncPts, rails);
+    if (details && this.options.detailRails !== false) this._guardRails(entries, juncPts, rails);
 
     const out = [];
     out.push({ geo: sidewalks.toGeometry(), role: 'sidewalk', name: 'sidewalks' });
@@ -2137,14 +2224,14 @@ export class CityRenderer {
    * smooth = few lobes, low noise; bumpy = medium; fluffy = more lobes, high noise. lowPoly = cone.
    * Built once and shared by all trees (instance matrices vary the size and yaw).
    */
-  _crownGeometry(edge, lowPoly) {
+  _crownGeometry(edge, lowPoly, season = 'summer', variant = 0) {
     if (lowPoly) {
       const g = new THREE.ConeGeometry(1, 2, 6);
       g.translate(0, 1, 0); // base at y = 0
       return toBatchable(g, [1, 1, 1]);
     }
     const P = CROWN_LOBES[edge] || CROWN_LOBES.smooth;
-    const r = rng(hashStr(`crown:${edge}`));
+    const r = rng(hashStr(variant ? `crown:${edge}:${variant}` : `crown:${edge}`));
     const nLobes = P.lobes[0] + Math.floor(r() * (P.lobes[1] - P.lobes[0] + 1));
     const parts = [crownLobe(0, 0.02, 0, 0.6, P.detail, P.disp)];
     for (let k = 1; k < nLobes; k++) {
@@ -2153,20 +2240,76 @@ export class CityRenderer {
       const rad = P.rad[0] + (P.rad[1] - P.rad[0]) * r();
       parts.push(crownLobe(Math.cos(th) * d, (r() - 0.5) * 0.2, Math.sin(th) * d, rad, P.detail, P.disp));
     }
+    const g = tintGeometry(mergeGeometries(parts, false), CROWN_TINT[season]);
+    // crown variants: round, tall and slim, wide and low (instances scale on top of this)
+    if (variant === 1) g.scale(0.88, 1.18, 0.88);
+    else if (variant === 2) g.scale(1.14, 0.82, 1.14);
+    return g;
+  }
+
+  /** Bare-winter branch cluster at unit scale: eight forking twigs. */
+  _branchGeometry() {
+    const r = rng(hashStr('bare-branches'));
+    const parts = [];
+    const twig = (a, b, r0, r1) => parts.push(this._limbPiece(a, b, r0, r1));
+    for (let k = 0; k < 8; k++) {
+      const th = k * 0.785 + r() * 0.4;
+      const out = 0.55 + 0.35 * r();
+      const tip = [Math.cos(th) * out, 0.9 + 0.5 * r(), Math.sin(th) * out];
+      twig([0, 0, 0], tip, 0.07, 0.025);
+      const mid = tip.map((v) => v * 0.55);
+      for (const side of [-1, 1]) {
+        const a2 = th + side * (0.5 + 0.3 * r());
+        twig(mid, [mid[0] + Math.cos(a2) * 0.4, mid[1] + 0.35 + 0.2 * r(), mid[2] + Math.sin(a2) * 0.4], 0.035, 0.012);
+      }
+    }
     return mergeGeometries(parts, false);
   }
 
-  /** Bare-winter branch cluster (several thin cones) at unit scale. */
-  _branchGeometry() {
+  /** One tapered branch segment from a to b (white vertex colour, 4 sides). */
+  _limbPiece(a, b, r0, r1, colour = [1, 1, 1]) {
+    const dir = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    const len = dir.length();
+    const g = new THREE.CylinderGeometry(r1, r0, len, 4, 1, true);
+    g.translate(0, len / 2, 0);
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize()));
+    g.translate(a[0], a[1], a[2]);
+    return toBatchable(g, colour);
+  }
+
+  /**
+   * Limbs under a crown, origin at the trunk top. fork = five limbs rising and forking into a broadleaf
+   * crown; spread = a rain tree's wide, low limbs reaching out under a flat canopy (unit crown radius 4.7 m).
+   * White vertex colour so the trunk material colours them like the trunk.
+   */
+  _limbGeometry(shape) {
     const parts = [];
-    for (let k = 0; k < 5; k++) {
-      const c = new THREE.ConeGeometry(0.1, 1.8, 4);
-      c.translate(0, 0.9, 0);
-      c.rotateZ(0.8);
-      c.rotateY(k * 1.256);
-      parts.push(toBatchable(c, [1, 1, 1]));
+    const thick = shape === 'spread' ? 0.2 : 0.15;
+    const bark = colArr(PAL.trunk); // baked in, like the trunk's colour
+    for (const { base, knee, tip, fork } of limbSpecs(shape)) {
+      parts.push(this._limbPiece(base, knee, thick, thick * 0.7, bark));
+      parts.push(this._limbPiece(knee, tip, thick * 0.7, thick * 0.35, bark));
+      parts.push(this._limbPiece(knee, fork, thick * 0.5, thick * 0.22, bark));
     }
     return mergeGeometries(parts, false);
+  }
+
+  /**
+   * Leaves for the limbs: a clump at the end of every limb and fork (and a small one along the limb),
+   * so branches are not bare in leaf seasons. Coarse lobes keep it cheap; white vertex colour.
+   */
+  _limbLeavesGeometry(shape, edge, season = 'summer') {
+    const P = CROWN_LOBES[edge] || CROWN_LOBES.smooth;
+    const r = rng(hashStr(`limbleaves:${shape}`));
+    const big = shape === 'spread' ? 1.5 : 1.0;
+    const parts = [];
+    const lobe = (c, rad) => parts.push(crownLobe(c[0], c[1], c[2], rad * big, 1, P.disp));
+    for (const { knee, tip, fork } of limbSpecs(shape)) {
+      lobe(tip, 0.95 + 0.3 * r());
+      lobe(fork, 0.75 + 0.25 * r());
+      lobe([knee[0] * 1.1, knee[1] + 0.35, knee[2] * 1.1], 0.6 + 0.2 * r());
+    }
+    return tintGeometry(mergeGeometries(parts, false), CROWN_TINT[season]);
   }
 
   /** Conifer crown: four stacked cone tiers, base at y = 0, top at y = 1, unit radius. lowPoly = one cone. */
@@ -2183,7 +2326,7 @@ export class CityRenderer {
       g.translate(0, k * 0.2 + 0.2, 0);
       parts.push(toBatchable(g, [1, 1, 1]));
     }
-    return mergeGeometries(parts, false);
+    return tintGeometry(mergeGeometries(parts, false), CONIFER_TINT, 0.1);
   }
 
   /** Palm crown: eight arching fronds (thin diamond-section strips) from the trunk top at the origin, unit length. */
@@ -2227,18 +2370,26 @@ export class CityRenderer {
    */
   _buildTrees(trees) {
     const opt = this.options;
+    this._treeLOD = []; // crown / far-crown pairs for the picture distance
     const season = Object.prototype.hasOwnProperty.call(SEASON_CROWN, opt.season) ? opt.season : 'summer';
     const palette = SEASON_CROWN[season];
     // trunks: tone -> always visible, tone-noline -> colour pass only, lines -> edge pass only
     const trunkLayer = opt.treeStyle === 'tone' ? 0 : opt.treeStyle === 'tone-noline' ? 1 : 2;
     // crowns: tone styles use the tone-crown layer (see LAYER_TONE_CROWN), lines uses the edge layer
     const crownLayer = opt.treeStyle === 'tone' || opt.treeStyle === 'tone-noline' ? LAYER_TONE_CROWN : 2;
-    const pts = (trees || []).filter((t) => this._clearOf(t[0], t[1], 4.5)).slice(0, 40000);
+    // density: thin out the map's trees, or add street trees on top of them
+    const dens = Math.max(0, Math.min(3, Number(opt.treeDensity ?? 100) / 100));
+    let pool = trees || [];
+    if (dens < 1) pool = pool.filter((_, i) => rng(hashStr(`treethin:${i}`))() < dens);
+    const pts = pool.filter((t) => this._clearOf(t[0], t[1], 4.5));
+    if (dens > 1) pts.push(...this._streetTrees((dens - 1) / 2));
+    pts.length = Math.min(pts.length, 40000);
     const n = pts.length;
     if (!n) return;
 
-    const mix = TREE_MIX[opt.treeType] || TREE_MIX.mixed;
-    const [k0, k1] = TREE_SIZE[opt.treeSize] || TREE_SIZE.normal;
+    const mix = parseTreeMix(opt.treeMix, this._city && this._city.center);
+    const k0 = Number.isFinite(Number(opt.treeSizeMin)) ? Number(opt.treeSizeMin) : 0.95;
+    const k1 = Math.max(k0, Number.isFinite(Number(opt.treeSizeMax)) ? Number(opt.treeSizeMax) : 1.05);
     const pick = (u) => {
       let acc = 0;
       for (const [kind, w] of mix) if (u < (acc += w)) return kind;
@@ -2261,7 +2412,27 @@ export class CityRenderer {
     const up = new THREE.Vector3(0, 1, 0);
     const col = new THREE.Color();
     // per crown shape: instance matrices, colours and positions
-    const sets = { round: [], conifer: [], palm: [] };
+    const sets = { round: [], roundB: [], roundC: [], conifer: [], palm: [] };
+    // lean: tilt the trunk and carry the crown with it
+    const qT = new THREE.Quaternion();
+    const leanAxis = new THREE.Vector3();
+    // colour: palette pick with hue / saturation / lightness jitter, a slow drift between neighbourhoods
+    // and a few accent trees
+    const tmpC = new THREE.Color();
+    const hsl = {};
+    const leafColour = (r, x, y) => {
+      let hex = palette[Math.floor(r() * palette.length)];
+      const accents = ACCENT_CROWN[season];
+      if (accents && r() < 0.07) hex = accents[Math.floor(r() * accents.length)];
+      const drift = rng(hashStr(`treehue:${Math.floor(x / 60)}:${Math.floor(y / 60)}`))() - 0.5;
+      tmpC.set(hex).getHSL(hsl);
+      tmpC.setHSL((hsl.h + (r() - 0.5) * 0.05 + drift * 0.04 + 1) % 1, clamp(hsl.s * (0.88 + 0.24 * r()), 0, 1), clamp(hsl.l * (0.86 + 0.28 * r()), 0, 0.95));
+      return '#' + tmpC.getHexString();
+    };
+    // limbs (branches under the crown): per tree matrix, in two shapes
+    const limbs = { fork: [], spread: [] };
+    const leaves = { fork: [], spread: [] }; // limb matrix + crown colour, in leaf seasons
+    const bare = !palette; // winter: the branches are the tree
     const add = (kind, pt, colour) => sets[kind].push({ m: m4.clone(), c: colour, pt });
 
     for (let i = 0; i < n; i++) {
@@ -2304,33 +2475,58 @@ export class CityRenderer {
         continue;
       }
 
-      // round crowns: broadleaf (wide) or columnar (poplar / cypress: narrow and tall)
+      // round crowns: broadleaf (wide), umbrella (rain tree: flat and spreading) or columnar (poplar / cypress)
       const columnar = kind === 'columnar';
-      const trunkH = (columnar ? 1.2 + 0.8 * r() : 4 + 2 * r()) * k; // 4-6 m trunk for broadleaf
-      const cr = (columnar ? 1.3 + 0.5 * r() : 2.6 + 1.2 * r()) * k; // broadleaf crown 5-8 m across
-      const ch = columnar ? (4 + 1.5 * r()) * k : cr * 0.85; // crown vertical scale
+      const umbrella = kind === 'umbrella';
+      const trunkH = (columnar ? 1.2 + 0.8 * r() : umbrella ? 3.2 + 1.6 * r() : 4 + 2 * r()) * k; // 4-6 m trunk for broadleaf
+      const cr = (columnar ? 1.3 + 0.5 * r() : umbrella ? 4 + 1.4 * r() : 2.6 + 1.2 * r()) * k; // broadleaf crown 5-8 m across
+      const ch = columnar ? (4 + 1.5 * r()) * k : umbrella ? cr * 0.4 : cr * 0.85; // crown vertical scale
+      // about half the broadleaf trees show their limbs under a lifted crown; umbrella trees always do
+      const branchy = !columnar && !opt.lowPoly && (umbrella || bare || r() < 0.45);
       const wx = cr * (0.9 + 0.2 * r()); // per-tree width jitter (shared crown geometry)
       const wz = cr * (0.9 + 0.2 * r());
+      const rk = bare ? 'round' : ['round', 'roundB', 'roundC'][Math.floor(r() * 3)]; // crown shape variant
+      // most broadleaf trees lean a little; the crown follows the trunk top
+      const lean = columnar ? 0 : (r() - 0.5) * 0.2;
+      const lth = r() * Math.PI * 2;
+      const lx = Math.cos(lth), lz = Math.sin(lth);
+      const sway = Math.tan(Math.abs(lean)) * trunkH; // how far the trunk top moves sideways
+      const ox = lx * sway, oz = lz * sway;
+      if (lean) qT.setFromAxisAngle(leanAxis.set(lz, 0, -lx), Math.abs(lean));
+      else qT.identity();
 
       // trunk: unit cylinder stretched to trunkH
       p.set(x, g, -y);
       s.set(k, columnar ? trunkH + ch : trunkH, k);
-      m4.compose(p, qI, s);
+      m4.compose(p, qT, s);
       trunk.setMatrixAt(i, m4);
+
+      let limbM = null;
+      if (branchy) {
+        // limbs rise from the trunk top (their base sits 0.6 m below it) into the crown
+        p.set(x + ox, g + trunkH, -y + oz);
+        const w = umbrella ? cr / 4.7 : k; // rain tree limbs scale with the wide crown
+        s.set(w, k, w);
+        limbM = m4.clone().compose(p, q, s);
+        limbs[umbrella ? 'spread' : 'fork'].push(limbM);
+      }
 
       if (palette) {
         if (opt.lowPoly) {
-          p.set(x, g + trunkH * 0.8, -y);
+          p.set(x + ox, g + trunkH * 0.8, -y + oz);
           s.set(cr, columnar ? ch * 1.4 : cr * 1.5, cr);
         } else {
-          p.set(x, g + trunkH + (columnar ? ch * 0.8 : cr * 0.25), -y);
+          const lift = columnar ? ch * 0.8 : umbrella ? ch * 0.9 + 1.2 * k : branchy ? cr * 0.5 : cr * 0.25;
+          p.set(x + ox, g + trunkH + lift, -y + oz);
           s.set(wx, ch, wz);
         }
         m4.compose(p, q, s);
-        add('round', pt, palette[Math.floor(r() * palette.length)]);
+        const leafCol = leafColour(r, x, y);
+        if (limbM) leaves[umbrella ? 'spread' : 'fork'].push({ m: limbM, c: leafCol });
+        add(rk, pt, leafCol);
       } else {
         // winter: bare branches at the top of the trunk
-        p.set(x, g + trunkH * 0.85, -y);
+        p.set(x + ox, g + trunkH * 0.85, -y + oz);
         if (columnar) s.set(cr * 0.7, ch * 0.8, cr * 0.7);
         else s.set(cr * 0.9, cr * 0.9, cr * 0.9);
         m4.compose(p, q, s);
@@ -2340,8 +2536,20 @@ export class CityRenderer {
     trunk.instanceMatrix.needsUpdate = true;
     trunk.computeBoundingSphere();
 
+    for (const [shape, list] of Object.entries(limbs)) {
+      if (!list.length) continue;
+      const im = new THREE.InstancedMesh(this._limbGeometry(shape), this._materialFor('tree-trunk'), list.length);
+      list.forEach((m, j) => im.setMatrixAt(j, m));
+      im.instanceMatrix.needsUpdate = true;
+      im.computeBoundingSphere();
+      this._registerMesh(im, 'tree-trunk', 'trees', trunkLayer, { name: `tree-limbs-${shape}` });
+    }
+
+    const crownFor = (v) => () => (palette ? this._crownGeometry(opt.leafEdge, opt.lowPoly, season, v) : this._branchGeometry());
     const geos = {
-      round: () => (palette ? this._crownGeometry(opt.leafEdge, opt.lowPoly) : this._branchGeometry()),
+      round: crownFor(0),
+      roundB: crownFor(1),
+      roundC: crownFor(2),
       conifer: () => this._coniferGeometry(opt.lowPoly),
       palm: () => this._palmGeometry(),
     };
@@ -2361,33 +2569,72 @@ export class CityRenderer {
       meshes[kind] = im;
     }
 
+    // leaf clumps on the limbs (same material, layer and colours as the crowns)
+    for (const [shape, list] of Object.entries(leaves)) {
+      if (!list.length || !palette) continue;
+      const im = new THREE.InstancedMesh(this._limbLeavesGeometry(shape, opt.leafEdge, season), this._materialFor('tree-crown'), list.length);
+      list.forEach((e, j) => {
+        im.setMatrixAt(j, e.m);
+        im.setColorAt(j, col.set(e.c));
+      });
+      im.instanceMatrix.needsUpdate = true;
+      if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      im.computeBoundingSphere();
+      this._registerMesh(im, 'tree-crown', 'trees', crownLayer, { name: `tree-leaves-${shape}` });
+    }
+
     // Tree picture distance: beyond it, round crowns switch to a cheap low-detail stand-in (0 = off).
-    this._treeLOD = null;
-    const crown = meshes.round;
-    if (crown && palette && !opt.lowPoly) {
+    const farGeo = palette && !opt.lowPoly ? tintGeometry(toBatchable(new THREE.IcosahedronGeometry(1, 1), colArr('#ffffff')), CROWN_TINT[season], 0.08) : null;
+    for (const key of ['round', 'roundB', 'roundC']) {
+      const crown = meshes[key];
+      if (!crown || !farGeo) continue;
       const m = crown.count;
-      const farGeo = toBatchable(new THREE.IcosahedronGeometry(1, 1), colArr('#ffffff'));
       const far = new THREE.InstancedMesh(farGeo, this._materialFor('tree-crown'), m);
-      this._registerMesh(far, 'tree-crown', 'trees', crownLayer, { name: 'tree-crown-far' });
+      this._registerMesh(far, 'tree-crown', 'trees', crownLayer, { name: `tree-crown-far${key.slice(5)}` });
       for (let i = 0; i < m; i++) {
         crown.getColorAt(i, col);
         far.setColorAt(i, col);
       }
       if (far.instanceColor) far.instanceColor.needsUpdate = true;
-      this._treeLOD = {
+      this._treeLOD.push({
         crown, far,
         mats: Float32Array.from(crown.instanceMatrix.array),
-        pts: sets.round.map((e) => e.pt),
+        pts: sets[key].map((e) => e.pt),
         last: null, lastDist: -1,
-      };
-      this._updateTreeLOD(true);
+      });
     }
+    this._updateTreeLOD(true);
+  }
+
+  /** Extra trees along the sidewalks of drivable roads: one candidate per side every 8 m, kept with probability `share` (0..1). */
+  _streetTrees(share) {
+    const out = [];
+    const c = this._city.center || { lat: 0, lon: 0 };
+    for (const rd of this._city.roads || []) {
+      if (!rd.points || rd.points.length < 2 || rd.tunnel) continue;
+      const foot = FOOT_KINDS.has(rd.kind || 'residential');
+      if (foot) continue;
+      const w = rd.width || 6;
+      if (w < 4) continue;
+      const r = rng(hashStr(`streettree:${c.lat}:${c.lon}:${rd.points[0][0].toFixed(1)}:${rd.points[0][1].toFixed(1)}`));
+      for (const s of samplePoly(resamplePolyline(rd.points, 2), 8, r() * 8)) {
+        for (const side of [-1, 1]) {
+          if (r() > share) continue;
+          const off = side * (w / 2 + 1.6 + 0.4 * r());
+          const x = s.x + s.nx * off, y = s.y + s.ny * off;
+          if (this._clearOf(x, y, 4.5)) out.push([x, y]);
+        }
+      }
+    }
+    return out;
   }
 
   /** Swap crowns between the detailed and far meshes by distance from the camera. */
   _updateTreeLOD(force = false) {
-    const L = this._treeLOD;
-    if (!L) return;
+    for (const L of this._treeLOD || []) this._updateTreeLODOne(L, force);
+  }
+
+  _updateTreeLODOne(L, force) {
     const dist = Math.max(0, Number(this.options.treeDistance ?? 100));
     const cp = this.camera.position;
     if (!force && L.last && L.lastDist === dist && Math.hypot(cp.x - L.last[0], cp.z - L.last[1]) < 2) return;
@@ -2648,7 +2895,7 @@ export class CityRenderer {
   }
 
   /**
-   * Deterministic instanced people and cars; options.people / options.cars: 'none' | 'few' | 'many'.
+   * Deterministic instanced people and cars; densities, shares and seed come from the world options (WORLD_KEYS).
    * - Every spot is checked against buildings, water and carriageways, so people stay on sidewalks,
    *   footways and zebra crossings, and cars stay out of buildings and off each other.
    * - Each junction gets a light phase: one road is red (people walk its zebra crossings, cars queue
@@ -2657,16 +2904,35 @@ export class CityRenderer {
    *   circles with hand gestures. Moving cars keep to the local traffic side, parked ones line the curb.
    */
   _buildCrowd(roads) {
-    const density = (v) => (v === 'few' || v === 'many' ? v : null);
-    const pMode = density(this.options.people);
-    const cMode = density(this.options.cars);
+    const o = this.options;
+    const num = (v, d, lo, hi) => Math.min(hi, Math.max(lo, Number.isFinite(Number(v)) ? Number(v) : d));
+    const pd = num(o.peopleDensity, 0, 0, 100);
+    const cd = num(o.carDensity, 0, 0, 100);
+    // spots per metre of street, from the density slider (anchors: the old "a few" at 35 and "many" at 80)
+    const pRate = lerpAnchors(pd, [[0, 0], [35, 0.022], [80, 0.14], [100, 0.2]]);
+    const cRate = lerpAnchors(cd, [[0, 0], [35, 0.0133], [80, 0.083], [100, 0.12]]);
+    const pMode = pRate > 0;
+    const cMode = cRate > 0;
     if (!pMode && !cMode) return;
-    const pMany = pMode === 'many';
-    const cMany = cMode === 'many';
+    const pT = num((pd - 35) / 45, 0, 0, 1); // 0 at "a few", 1 at "many"
+    const cT = num((cd - 35) / 45, 0, 0, 1);
+    const walkW = num(o.walkShare, 75, 0, 100), standW = num(o.standShare, 15, 0, 100), talkW = num(o.talkShare, 10, 0, 100);
+    const shareSum = walkW + standW + talkW || 1;
+    const talkP = talkW / shareSum;
+    const standP = standW / shareSum;
+    const groupMax = Math.round(num(o.groupSize, 4, 2, 6));
+    const kidsP = num(o.kidsShare, 6, 0, 100) / 100;
+    const crossP = num(o.crossing, 50, 0, 100) / 100;
+    const gest = num(o.gesture, 70, 0, 100) / 100;
+    const parkedP = num(o.carParked, 40, 0, 100) / 100;
+    const queueMax = Math.round(num(o.carQueue, 3, 1, 8));
+    const allowed = new Set(String(o.carTypes ?? '').split(','));
+    const palette = o.carPalette === 'mono' ? MONO_CAR_COLORS : o.carPalette === 'colorful' ? COLORFUL_CAR_COLORS : CAR_COLORS;
     const c = this._city.center || { lat: 0, lon: 0 };
-    const rp = rng(hashStr(`people:${c.lat}:${c.lon}`));
-    const rc = rng(hashStr(`cars:${c.lat}:${c.lon}`));
-    const hand = leftHandTraffic(c.lat, c.lon) ? -1 : 1;
+    const seed = o.worldSeed ? `:s${o.worldSeed}` : '';
+    const rp = rng(hashStr(`people:${c.lat}:${c.lon}${seed}`));
+    const rc = rng(hashStr(`cars:${c.lat}:${c.lon}${seed}`));
+    const hand = o.trafficSide === 'left' ? -1 : o.trafficSide === 'right' ? 1 : leftHandTraffic(c.lat, c.lon) ? -1 : 1;
     const pick = (list, u) => list[Math.floor(u * list.length)];
     const yawOf = (hx, hy) => Math.atan2(hx, -hy); // heading (local east, north) -> rotation about +Y
 
@@ -2675,8 +2941,11 @@ export class CityRenderer {
       if (!rd.points || rd.points.length < 2 || rd.tunnel) continue;
       const kind = rd.kind || 'residential';
       const foot = FOOT_KINDS.has(kind);
-      entries.push({ pts: rd.points, kind, foot, major: MAJOR_KINDS.has(kind), w: rd.width || (foot ? 2 : 6), lanes: rd.lanes || 0 });
+      entries.push({ pts: rd.points, kind, foot, major: MAJOR_KINDS.has(kind), w: rd.width || (foot ? 2 : 6), lanes: rd.lanes || 0, name: rd.name || '' });
     }
+    // OSM splits a street into many short ways; sample each chain of connected ways as one street so
+    // people and cars are spread evenly instead of restarting at every way.
+    chainEntries(entries, rp() * 5, rc() * 6);
     const idx = this._placementIndex(entries);
     const drivable = (e) => !e.foot && e.w >= 5 && !(e.lanes === 1 && e.w < 6);
 
@@ -2685,7 +2954,7 @@ export class CityRenderer {
     const addPerson = (x, y, yaw, v, onRoad = false) => {
       if (!this._clearOf(x, y, 2.5) || idx.inBuilding(x, y) || idx.inWater(x, y)) return;
       if (!onRoad && idx.onRoad(x, y, 0.3)) return;
-      const scale = rp() < 0.06 ? 0.62 + 0.1 * rp() : 0.93 + 0.13 * rp(); // a few children
+      const scale = rp() < kidsP ? 0.62 + 0.1 * rp() : 0.93 + 0.13 * rp(); // a few children
       people.push({ x, y, yaw, v, scale, cols: [rp(), rp(), rp()] });
     };
     const addCar = (x, y, yaw, type, col) => {
@@ -2697,11 +2966,25 @@ export class CityRenderer {
       for (const k of [-1, 0, 1]) if (idx.inBuilding(x + hx * half * k, y + hy * half * k)) return;
       cars.push({ x, y, yaw, type, col });
     };
+    // a circle of 2+ people facing each other, most of them gesturing
+    const addGroup = (cx, cy) => {
+      const n = 2 + Math.floor(rp() * (groupMax - 1));
+      const R = 0.45 + 0.12 * n;
+      const a0 = rp() * Math.PI * 2;
+      for (let k = 0; k < n; k++) {
+        const a = a0 + (k * Math.PI * 2) / n + (rp() - 0.5) * 0.4;
+        const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
+        const v = (k === 0 && gest > 0) || rp() < gest ? pick(TALK_VARIANTS, rp()) : pick(IDLE_VARIANTS, rp());
+        addPerson(x, y, yawOf(cx - x, cy - y) + (rp() - 0.5) * 0.5, v);
+      }
+    };
     const carType = (e, u, allowBus) => {
       const busOk = allowBus && e.w >= 8 && BUS_KINDS.has(e.kind);
-      return pickWeighted(CAR_TYPES, u, (t) => (t[0] === 'bus' && !busOk ? 0 : t[1]));
+      const weight = (t) => (!allowed.has(t[0]) || (t[0] === 'bus' && !busOk) ? 0 : t[1]);
+      return CAR_TYPES.some((t) => weight(t) > 0) ? pickWeighted(CAR_TYPES, u, weight) : null;
     };
-    const carColour = (type, u) => (type === 'bus' ? BUS_COLORS[Math.floor(u * BUS_COLORS.length)] : pickWeighted(CAR_COLORS, u));
+    const busColors = o.carPalette === 'mono' ? MONO_BUS_COLORS : BUS_COLORS;
+    const carColour = (type, u) => (type === 'bus' ? busColors[Math.floor(u * busColors.length)] : pickWeighted(palette, u));
 
     // ----- junctions: light phase, zebra crossings, queues -----
     const junctions = findJunctions(entries);
@@ -2710,7 +2993,8 @@ export class CityRenderer {
       const r = rng(hashStr(`phase:${j.x.toFixed(1)}:${j.y.toFixed(1)}`));
       const ids = [...j.roads];
       j.red = ids[Math.floor(r() * ids.length)]; // the road whose traffic is stopped
-      j.busy = r() < (pMany || cMany ? 0.8 : 0.4); // people crossing here right now
+      j.busy = r() < crossP; // people crossing here right now
+      j.carBusy = r() < 0.4 + 0.4 * cT; // cars waiting here right now
       j.r = r;
       for (const ei of ids) byRoad[ei].push(j);
     }
@@ -2722,7 +3006,7 @@ export class CityRenderer {
         if (leg.ei === j.red) {
           // people on the zebra crossing, walking across either way
           if (pMode && j.busy) {
-            const n = 1 + Math.floor(r() * (pMany ? 4 : 2));
+            const n = 1 + Math.floor(r() * (2 + Math.round(2 * pT)));
             for (let k = 0; k < n; k++) {
               const s = (r() - 0.5) * Math.max(0, leg.w - 1);
               const a = (r() - 0.5) * 2 * (CROSS_HALF - 0.4);
@@ -2731,27 +3015,32 @@ export class CityRenderer {
             }
           }
           // cars waiting behind the stop line, in the lane heading into the junction
-          if (cMode && drivable(e) && (j.signal || j.busy)) {
-            const lat = (hand * leg.w) / 4;
-            const n = 1 + Math.floor(r() * (cMany ? 4 : 2));
-            let d = CROSS_AT + CROSS_HALF + 1.5 + 2.3;
-            for (let k = 0; k < n; k++, d += 5.4 + 0.8 * r()) {
-              if (!pointAlong(leg.path, d + 2.3)) break;
-              const s = pointAlong(leg.path, d);
-              const hx = -s.tx, hy = -s.ty; // facing the junction
-              const type = carType(e, r(), k > 0);
-              addCar(s.x + hy * lat, s.y - hx * lat, yawOf(hx, hy) + (r() - 0.5) * 0.03, type, carColour(type, r()));
+          if (cMode && drivable(e) && (j.signal || j.carBusy)) {
+            // one queue per lane heading into the junction (wide roads have two or three)
+            const lanesIn = e.lanes >= 4 ? Math.min(3, Math.floor(e.lanes / 2)) : e.w >= 11 ? 2 : 1;
+            for (let m = 0; m < lanesIn; m++) {
+              const lat = hand * (leg.w / 2 / lanesIn) * (m + 0.5);
+              const n = 1 + Math.floor(r() * queueMax);
+              let d = CROSS_AT + CROSS_HALF + 1.5 + 2.3 + 1.5 * r() * (m > 0);
+              for (let k = 0; k < n; k++, d += 5.4 + 0.8 * r()) {
+                if (!pointAlong(leg.path, d + 2.3)) break;
+                const s = pointAlong(leg.path, d);
+                const hx = -s.tx, hy = -s.ty; // facing the junction
+                const type = carType(e, r(), k > 0);
+                if (!type) break;
+                addCar(s.x + hy * lat, s.y - hx * lat, yawOf(hx, hy) + (r() - 0.5) * 0.03, type, carColour(type, r()));
+              }
             }
           }
         } else if (pMode && j.signal) {
           // green road: people wait at the curb at both ends of its crossing, facing across
           for (const side of [-1, 1]) {
-            if (r() > (pMany ? 0.7 : 0.35)) continue;
-            const n = 1 + Math.floor(r() * (pMany ? 3 : 2));
+            if (r() > 0.35 + 0.35 * pT) continue;
+            const n = 1 + Math.floor(r() * (2 + Math.round(pT)));
             for (let k = 0; k < n; k++) {
               const s = side * (leg.w / 2 + 0.7 + 0.6 * r());
               const a = (r() - 0.5) * 2.4;
-              const v = r() < 0.2 ? pick(TALK_VARIANTS, r()) : pick(IDLE_VARIANTS, r());
+              const v = r() < 0.29 * gest ? pick(TALK_VARIANTS, r()) : pick(IDLE_VARIANTS, r());
               addPerson(leg.cx + px * s + leg.ux * a, leg.cy + py * s + leg.uy * a, yawOf(-side * px, -side * py) + (r() - 0.5) * 0.5, v);
             }
           }
@@ -2773,41 +3062,31 @@ export class CityRenderer {
     };
 
     entries.forEach((e, ei) => {
-      const path = resamplePolyline(e.pts, 2);
+      const path = resamplePolyline(e.spts, 2);
 
       // ----- people along the street: walkers, people standing around, talking groups -----
       if (pMode) {
-        for (const s of samplePoly(path, pMany ? 5 : 16, rp() * 5)) {
-          if (rp() > (pMany ? 0.7 : 0.35)) continue;
+        for (const s of samplePoly(path, 5, e.pOff)) {
+          if (rp() > Math.min(1, pRate * 5)) continue;
           const side = rp() < 0.5 ? -1 : 1;
           const roll = rp();
-          if (roll < (pMany ? 0.12 : 0.08)) {
-            // a circle of 2-4 people facing each other, most of them gesturing
+          if (roll < talkP) {
             const off = e.foot ? 0 : side * (e.w / 2 + 1.3);
-            const cx = s.x + s.nx * off, cy = s.y + s.ny * off;
-            const n = 2 + Math.floor(rp() * 3);
-            const R = 0.45 + 0.12 * n;
-            const a0 = rp() * Math.PI * 2;
-            for (let k = 0; k < n; k++) {
-              const a = a0 + (k * Math.PI * 2) / n + (rp() - 0.5) * 0.4;
-              const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
-              const v = k === 0 || rp() < 0.7 ? pick(TALK_VARIANTS, rp()) : pick(IDLE_VARIANTS, rp());
-              addPerson(x, y, yawOf(cx - x, cy - y) + (rp() - 0.5) * 0.5, v);
-            }
+            addGroup(s.x + s.nx * off, s.y + s.ny * off);
             continue;
           }
           // sidewalk band: 0.5-2.1 m from the curb (sidewalks are 2.5 m wide); footways: on the path
           const off = e.foot ? (rp() - 0.5) * Math.max(0, e.w - 0.8) : side * (e.w / 2 + 0.6 + 1.5 * rp());
-          if (roll < 0.25) {
+          if (roll < talkP + standP) {
             // standing alone: waiting, on the phone, or calling out to someone
-            const v = rp() < 0.25 ? pick(TALK_VARIANTS, rp()) : pick(IDLE_VARIANTS, rp());
+            const v = rp() < 0.36 * gest ? pick(TALK_VARIANTS, rp()) : pick(IDLE_VARIANTS, rp());
             addPerson(s.x + s.nx * off, s.y + s.ny * off, rp() * Math.PI * 2, v);
             continue;
           }
           // walking along the street, sometimes side by side
           const dir = rp() < 0.5 ? 1 : -1;
           const heading = yawOf(dir * s.tx, dir * s.ty);
-          const pair = rp() < (pMany ? 0.25 : 0.12);
+          const pair = rp() < 0.12 + 0.13 * pT;
           for (const o of pair ? [-0.33, 0.33] : [0]) {
             addPerson(s.x + s.nx * (off + o), s.y + s.ny * (off + o), heading + (rp() - 0.5) * 0.3, pick(WALK_VARIANTS, rp()));
           }
@@ -2816,20 +3095,21 @@ export class CityRenderer {
 
       // ----- cars along the carriageway: moving in lane, or parked at the curb -----
       if (cMode && drivable(e)) {
-        const every = cMany ? 9 : 30;
+        const every = 6;
         const parkable = PARK_KINDS.has(e.kind);
-        for (const s of samplePoly(path, every, rc() * every)) {
-          if (rc() > (cMany ? 0.75 : 0.4)) continue;
-          const parked = parkable && rc() < 0.4;
+        for (const s of samplePoly(path, every, e.cOff)) {
+          if (rc() > Math.min(1, cRate * every)) continue;
+          const parked = parkable && rc() < parkedP;
           const sideSign = rc() < 0.5 ? -1 : 1;
           const lateral = parked ? sideSign * (e.w / 2 - 1.1) : sideSign * (e.w / 4) + (rc() - 0.5) * 0.5;
           // moving cars drive on the local traffic side; a few parked ones face against it
           const dir = parked && rc() < 0.25 ? -sideSign * hand : sideSign * hand;
           const yawJit = (rc() - 0.5) * (parked ? 0.1 : 0.04);
-          const n = parked && rc() < (cMany ? 0.5 : 0.2) ? 2 + Math.floor(rc() * 2) : 1; // a short row at the curb
+          const n = parked && rc() < 0.2 + 0.3 * cT ? 2 + Math.floor(rc() * 2) : 1; // a short row at the curb
           let along = (rc() - 0.5) * every * 0.4;
           for (let k = 0; k < n; k++, along += 5.2 + rc()) {
             const type = carType(e, rc(), !parked);
+            if (!type) break;
             const col = carColour(type, rc());
             const x = s.x + s.tx * along + s.nx * lateral;
             const y = s.y + s.ty * along + s.ny * lateral;
@@ -2841,6 +3121,34 @@ export class CityRenderer {
         }
       }
     });
+
+    // ----- plazas: people anywhere on the paving, about 1 per 80 m2 at full density -----
+    if (pMode) {
+      for (const a of this._city.areas || []) {
+        if (a.kind !== 'plaza' || !a.outer || a.outer.length < 3) continue;
+        let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+        for (const [x, y] of a.outer) {
+          minx = Math.min(minx, x); maxx = Math.max(maxx, x);
+          miny = Math.min(miny, y); maxy = Math.max(maxy, y);
+        }
+        const box = (maxx - minx) * (maxy - miny);
+        if (!(box > 150) || box > 60000) continue;
+        const rz = rng(hashStr(`plaza:${a.outer[0][0].toFixed(1)}:${a.outer[0][1].toFixed(1)}${seed}`));
+        const inside = (x, y) => inRing(x, y, a.outer) && !(a.holes || []).some((h) => h && h.length > 2 && inRing(x, y, h));
+        const want = Math.min(150, Math.round(box * (pd / 100) * 0.0125 * 0.6)); // the box overstates the area a bit
+        for (let k = 0; k < want; k++) {
+          const x = minx + (maxx - minx) * rz(), y = miny + (maxy - miny) * rz();
+          if (!inside(x, y)) continue;
+          const roll = rz();
+          if (roll < talkP) { addGroup(x, y); continue; }
+          if (roll < talkP + standP) {
+            addPerson(x, y, rz() * Math.PI * 2, rz() < 0.36 * gest ? pick(TALK_VARIANTS, rz()) : pick(IDLE_VARIANTS, rz()), true);
+            continue;
+          }
+          addPerson(x, y, rz() * Math.PI * 2, pick(WALK_VARIANTS, rz()), true);
+        }
+      }
+    }
 
     const m4 = new THREE.Matrix4();
     const p = new THREE.Vector3();
@@ -2956,7 +3264,8 @@ export class CityRenderer {
     }
 
     // buildings: walls and roofs as two merged meshes
-    const bl = this._buildBuildings(city.buildings || [], false);
+    const lm = landmarksFor(city, this.options.landmarks !== false);
+    const bl = this._buildBuildings(lm.buildings, false, lm.draw);
     if (bl.walls) this._addMesh(bl.walls, 'building', 'buildings', { pickable: true, name: 'walls' });
     if (bl.roofs) this._addMesh(bl.roofs, 'building', 'buildings', { pickable: true, name: 'roofs' });
 
@@ -3014,8 +3323,23 @@ export class CityRenderer {
       partial = { people: partial.crowd, cars: partial.crowd, ...partial };
       delete partial.crowd;
     }
+    // older names ('few' / 'many' densities, tree type and size presets) map onto the numeric options
+    partial = { ...partial };
+    if ('people' in partial) partial.peopleDensity ??= LEGACY_DENSITY[partial.people] ?? 0;
+    if ('cars' in partial) partial.carDensity ??= LEGACY_DENSITY[partial.cars] ?? 0;
+    delete partial.people;
+    delete partial.cars;
+    if ('treeType' in partial) {
+      const preset = TREE_MIX[partial.treeType];
+      if (preset) partial.treeMix ??= preset === 'auto' ? 'auto' : preset.map(([k, w]) => `${k}:${Math.round(w * 100)}`).join(',');
+      delete partial.treeType;
+    }
+    if ('treeSize' in partial) {
+      if (TREE_SIZE[partial.treeSize]) [partial.treeSizeMin, partial.treeSizeMax] = TREE_SIZE[partial.treeSize];
+      delete partial.treeSize;
+    }
     Object.assign(this.options, partial);
-    const geometryKeys = ['terrain', 'trees', 'details', 'lowPoly', 'leafEdge', 'season', 'people', 'cars', 'treeStyle', 'treeType', 'treeSize'];
+    const geometryKeys = ['terrain', 'trees', 'details', 'lowPoly', 'leafEdge', 'season', 'treeStyle', ...WORLD_KEYS];
     const rebuild = geometryKeys.some((k) => k in partial && partial[k] !== prev[k]);
     if (rebuild) {
       if (this._city) this._buildAll();
@@ -3842,8 +4166,79 @@ const TREE_MIX = {
   conifer: [['conifer', 1]],
   columnar: [['columnar', 1]],
   palm: [['palm', 1]],
-  tropical: [['palm', 0.55], ['round', 0.45]],
+  tropical: [['palm', 0.35], ['umbrella', 0.35], ['round', 0.3]],
+  auto: 'auto',
 };
+// Building kinds (OSM building=*) whose walls get no window grid
+const NO_WINDOW_KINDS = new Set(['steps', 'roof', 'shed', 'carport', 'kiosk', 'hut', 'bridge', 'ruins', 'monument', 'memorial', 'tomb', 'gazebo', 'pavilion', 'stadium', 'service']);
+const LEGACY_DENSITY = { none: 0, few: 35, many: 80 };
+// Options that change what is in the scene and so rebuild it
+const WORLD_KEYS = [
+  'peopleDensity', 'walkShare', 'standShare', 'talkShare', 'groupSize', 'kidsShare', 'crossing', 'gesture',
+  'carDensity', 'carParked', 'carQueue', 'carTypes', 'carPalette', 'trafficSide', 'worldSeed',
+  'treeDensity', 'treeMix', 'treeSizeMin', 'treeSizeMax',
+  'landmarks', 'detailPoles', 'detailSignals', 'detailRails', 'detailCrosswalks', 'detailTactile',
+];
+/**
+ * Species mix for a place from its latitude / longitude, so the tropics get spreading rain trees and
+ * palms instead of northern conifers. Weights are [crown kind, share].
+ */
+function autoTreeMix(c) {
+  const lat = c ? Math.abs(c.lat) : 45;
+  const eastAsia = !!c && c.lon >= 100 && c.lon <= 146 && c.lat >= 20 && c.lat <= 46;
+  const south = !!c && c.lat < 0;
+  let w;
+  if (lat < 15) w = { umbrella: 38, round: 34, palm: 22, columnar: 6 };
+  else if (lat < 25) w = { round: 46, umbrella: 22, palm: 18, columnar: 9, conifer: 5 };
+  else if (lat < 35) w = { round: 62, columnar: 12, conifer: 10, umbrella: 8, palm: 8 };
+  else if (lat < 52) w = { round: 60, columnar: 15, conifer: 25 };
+  else w = { round: 45, conifer: 40, columnar: 15 };
+  if (eastAsia && lat >= 25) w = { round: 72, columnar: 14, conifer: 10, umbrella: 4 }; // Japan, Korea, north China
+  else if (south && lat >= 25) w = { round: 72, columnar: 10, conifer: 8, palm: 6, umbrella: 4 };
+  const total = Object.values(w).reduce((a, b) => a + b, 0);
+  return Object.entries(w).map(([k, v]) => [k, v / total]);
+}
+
+/**
+ * Shapes of the limbs under a crown, origin at the trunk top (metres at tree size 1): { base, knee, tip, fork }.
+ * fork = five limbs rising into a broadleaf crown; spread = six wide, low limbs of a rain tree.
+ */
+function limbSpecs(shape) {
+  const r = rng(hashStr(`limbs:${shape}`));
+  const n = shape === 'spread' ? 6 : 5;
+  const out = [];
+  for (let k = 0; k < n; k++) {
+    const th = (k / n) * Math.PI * 2 + (r() - 0.5) * 0.5;
+    const dx = Math.cos(th), dz = Math.sin(th);
+    const reach = shape === 'spread' ? 3.4 + 0.9 * r() : 1.5 + 0.6 * r();
+    const rise = shape === 'spread' ? 1.5 + 0.5 * r() : 2.2 + 0.8 * r();
+    const knee = [dx * reach * 0.45, rise * 0.55, dz * reach * 0.45];
+    // a fork off the knee
+    const a2 = th + (r() < 0.5 ? -1 : 1) * (0.6 + 0.4 * r());
+    const f = shape === 'spread' ? 1.8 : 1.0;
+    out.push({
+      base: [0, -0.6, 0],
+      knee,
+      tip: [dx * reach, rise, dz * reach],
+      fork: [knee[0] + Math.cos(a2) * f, knee[1] + 0.8 + 0.5 * r(), knee[2] + Math.sin(a2) * f],
+    });
+  }
+  return out;
+}
+
+/** 'round:60,conifer:25' -> [['round', 0.6], ['conifer', 0.25]]; unknown kinds and zero weights are dropped. */
+function parseTreeMix(str, center) {
+  if (str === 'auto') return autoTreeMix(center);
+  const kinds = new Set(['round', 'columnar', 'conifer', 'palm', 'umbrella']);
+  const out = [];
+  for (const part of String(str || '').split(',')) {
+    const [k, w] = part.split(':');
+    if (kinds.has(k) && Number(w) > 0) out.push([k, Number(w)]);
+  }
+  if (!out.length) return TREE_MIX.mixed;
+  const total = out.reduce((a, e) => a + e[1], 0);
+  return out.map(([k, w]) => [k, w / total]);
+}
 const TREE_SIZE = { small: [0.7, 0.75], normal: [0.95, 1.05], large: [1.25, 1.4], varied: [0.6, 1.45] };
 // Evergreen crowns: the same in every season.
 const CONIFER_CROWN = ['#2f5d3a', '#35683f', '#29523a', '#3d6f45'];
@@ -3884,6 +4279,11 @@ const CAR_TYPES = [['sedan', 30], ['compact', 22], ['kei', 14], ['suv', 14], ['v
 const CAR_COLORS = [
   ['#f2f2f4', 25], ['#c3c7cc', 15], ['#26262b', 15], ['#7c8189', 10], ['#2e3f63', 8], ['#b8352b', 8],
   ['#3a6ea5', 6], ['#d8c9a8', 5], ['#3f5d45', 4], ['#e5b93a', 2], ['#8a2433', 2],
+];
+const MONO_CAR_COLORS = [['#f2f2f4', 30], ['#c3c7cc', 20], ['#7c8189', 14], ['#26262b', 28]];
+const MONO_BUS_COLORS = ['#f2f2f4', '#c3c7cc', '#7c8189'];
+const COLORFUL_CAR_COLORS = [
+  ['#d33a2f', 3], ['#e5b93a', 3], ['#2f7fd0', 3], ['#2f9a5c', 3], ['#e57a2f', 2], ['#8a4fc0', 2], ['#e56fa0', 2], ['#33b5b0', 2], ['#f2f2f4', 2],
 ];
 const BUS_COLORS = ['#f2f2f4', '#3a6ea5', '#2f8a5c', '#e5b93a'];
 const PARK_KINDS = new Set(['residential', 'unclassified', 'living_street', 'service', 'tertiary']);
@@ -3978,6 +4378,82 @@ function pickWeighted(list, u, weightOf = (e) => e[1]) {
     if (u * total < acc) return e[0];
   }
   return list[list.length - 1][0];
+}
+
+/**
+ * Links entries (roads) that continue each other end to end (same kind and name, exactly two ways meeting
+ * at the vertex) and gives each one `spts` (its points, reversed if the chain runs the other way) and the
+ * sampling phases `pOff` / `cOff`: where the first sample falls so that spacing stays even across the chain
+ * (people every 5 m, cars every 6 m). `shiftP` / `shiftC` are the random starting shifts for each chain.
+ */
+function chainEntries(entries, shiftP, shiftC) {
+  const key = (p) => `${Math.round(p[0] * 2)},${Math.round(p[1] * 2)}`;
+  const at = new Map();
+  entries.forEach((e, i) => {
+    for (const end of [0, 1]) {
+      const k = key(end ? e.pts[e.pts.length - 1] : e.pts[0]);
+      if (!at.has(k)) at.set(k, []);
+      at.get(k).push({ i, end });
+    }
+  });
+  // the neighbour of entry i at one of its ends, or null
+  const next = (i, end) => {
+    const e = entries[i];
+    const refs = at.get(key(end ? e.pts[e.pts.length - 1] : e.pts[0]));
+    if (refs.length !== 2) return null;
+    const o = refs.find((r) => r.i !== i);
+    if (!o) return null;
+    const f = entries[o.i];
+    return f.kind === e.kind && f.name === e.name && f.foot === e.foot ? o : null;
+  };
+  const len = (pts) => pts.reduce((a, p, k) => (k ? a + Math.hypot(p[0] - pts[k - 1][0], p[1] - pts[k - 1][1]) : 0), 0);
+  const mod = (v, m) => ((v % m) + m) % m;
+  const seen = new Set();
+  const walk = (start, end0) => {
+    // follow the chain from entry `start`, leaving through its `end0` end; returns [{ i, rev }]
+    const out = [];
+    let i = start, leave = end0;
+    while (i !== null && !seen.has(i)) {
+      seen.add(i);
+      out.push({ i, rev: leave === 0 });
+      const nb = next(i, leave);
+      if (!nb) break;
+      i = nb.i;
+      leave = nb.end === 0 ? 1 : 0; // entered at nb.end, so leave by the other end
+    }
+    return out;
+  };
+  const chains = [];
+  // chains starting at a loose end first, then closed loops
+  entries.forEach((e, i) => {
+    if (seen.has(i)) return;
+    if (!next(i, 0)) chains.push(walk(i, 1));
+    else if (!next(i, 1)) chains.push(walk(i, 0));
+  });
+  entries.forEach((e, i) => { if (!seen.has(i)) chains.push(walk(i, 1)); });
+  for (const chain of chains) {
+    let dist = 0;
+    for (const { i, rev } of chain) {
+      const e = entries[i];
+      e.spts = rev ? e.pts.slice().reverse() : e.pts;
+      e.pOff = mod(shiftP - dist, 5);
+      e.cOff = mod(shiftC - dist, 6);
+      dist += len(e.pts);
+    }
+  }
+}
+
+/** Piecewise-linear value of `x` through [[x0, y0], [x1, y1], ...] (x ascending); clamped at both ends. */
+function lerpAnchors(x, anchors) {
+  if (x <= anchors[0][0]) return anchors[0][1];
+  for (let i = 1; i < anchors.length; i++) {
+    const [x1, y1] = anchors[i];
+    if (x <= x1) {
+      const [x0, y0] = anchors[i - 1];
+      return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
+    }
+  }
+  return anchors[anchors.length - 1][1];
 }
 
 /** Rough check for the countries that drive on the left (Japan, UK and Ireland, South and Southeast Asia, Oceania, southern Africa). */

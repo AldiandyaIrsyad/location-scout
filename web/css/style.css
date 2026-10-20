@@ -1040,3 +1040,24 @@ body.compact .viewer { height: 70vh; min-height: 420px; }
   .fx-strength { order: 5; flex: 1 1 100%; min-width: 0; padding-left: 36px; }
   .fx-params { grid-template-columns: minmax(0, 1fr); padding-left: 10px; }
 }
+
+/* World settings (top right of the 3D view): scrollable panel opening below the button */
+.overlay.world { top: 10px; right: 10px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.overlay.world > .btn { background: rgba(12, 17, 26, .8); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.overlay.world > .btn[aria-expanded="true"] { background: var(--accent-grad); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+.overlay.world .popover {
+  width: min(320px, calc(100vw - 40px));
+  max-height: min(70vh, calc(100% - 60px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: rgba(16, 22, 34, .97);
+  font-size: 12px;
+}
+.overlay.world .popover[hidden] { display: none; }
+.overlay.world .checks.wrap { gap: 4px 12px; }
+.overlay.world .inline-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.overlay.world .inline-grid label { display: flex; flex-direction: column; gap: 3px; color: var(--dim); min-width: 0; }
+.overlay.world .inline-grid select { width: 100%; }
+.overlay.world .row-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.overlay.world label.slider { grid-template-columns: minmax(80px, auto) minmax(80px, 1fr) 44px; }
+@media (max-width: 760px) { .overlay.world .inline-grid { grid-template-columns: 1fr 1fr; } }

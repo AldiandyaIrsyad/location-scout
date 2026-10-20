@@ -10,6 +10,7 @@ import (
 	"image/png"
 	"log/slog"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -65,7 +66,43 @@ func inJapan(lat, lon float64) bool {
 
 // decodeTerrarium reads height = R*256 + G + B/256 - 32768 from the RGBA pixel at offset o.
 func decodeTerrarium(px []uint8, o int) float64 {
+	// Joerd encodes missing data with R=0 (below any depth on Earth).
+	if px[o] == 0 || px[o+3] == 0 {
+		return math.NaN()
+	}
 	return float64(px[o])*256 + float64(px[o+1]) + float64(px[o+2])/256 - 32768
+}
+
+// terrainSample repairs isolated deep negative streaks observed in coastal Terrarium tiles.
+// It preserves coherent bathymetry, below-sea-level land and ordinary steep terrain. Only
+// samples below -500 m with a majority of nearby pixels above -500 m are replaced.
+func terrainSample(tile rgbaTile, x, y int) float64 {
+	h := decodeTerrarium(tile, (y*tilePx+x)*4)
+	if math.IsNaN(h) || h >= -500 {
+		return h
+	}
+	var nearby []float64
+	total := 0
+	for j := max(0, y-2); j <= min(tilePx-1, y+2); j++ {
+		for i := max(0, x-2); i <= min(tilePx-1, x+2); i++ {
+			if i == x && j == y {
+				continue
+			}
+			v := decodeTerrarium(tile, (j*tilePx+i)*4)
+			if math.IsNaN(v) {
+				continue
+			}
+			total++
+			if v >= -500 {
+				nearby = append(nearby, v)
+			}
+		}
+	}
+	if len(nearby) < 5 || len(nearby)*2 <= total {
+		return h
+	}
+	sort.Float64s(nearby)
+	return nearby[len(nearby)/2]
 }
 
 // decodeGSI reads v = R*65536 + G*256 + B, height = v * 0.01 (two's complement above 2^23).
@@ -202,8 +239,8 @@ func (s *GridService) Grid(ctx context.Context, lat, lon, size float64, n int) (
 	if err != nil {
 		return nil, err
 	}
-	// A grid built while some tile downloads failed for reasons other than "not found" is incomplete,
-	// so it is not cached: the next request may find the upstream healthy again.
+	// A grid built while source data is incomplete is not cached: the next request may find the
+	// upstream healthy again or obtain a complete fallback source.
 	if !degraded {
 		if raw, err := json.Marshal(g); err == nil {
 			s.results.Set(ctx, key, raw, s.resultTTL)
@@ -213,11 +250,11 @@ func (s *GridService) Grid(ctx context.Context, lat, lon, size float64, n int) (
 }
 
 func cacheKey(lat, lon, size float64, n int) string {
-	return fmt.Sprintf("elev:v1:%.5f:%.5f:%s:%d", lat, lon, strconv.FormatFloat(size, 'f', -1, 64), n)
+	return fmt.Sprintf("elev:v3:%.5f:%.5f:%s:%d", lat, lon, strconv.FormatFloat(size, 'f', -1, 64), n)
 }
 
-// build samples the sources in order. degraded reports whether any tile download failed for a reason
-// other than "not found".
+// build samples the sources in order. degraded reports whether the resulting grid is incomplete or
+// any tile download/decode failed for a reason other than "not found".
 func (s *GridService) build(ctx context.Context, lat, lon, size float64, n int) (g *Grid, degraded bool, err error) {
 	zoom := 15
 	if size > 1000 {
@@ -254,6 +291,9 @@ func (s *GridService) build(ctx context.Context, lat, lon, size float64, n int) 
 			break
 		}
 	}
+	// Unresolved cells become zero-valued entries in the relative float32 grid below. Keep that
+	// degraded grid out of the result cache so a later request can recover missing source data.
+	degraded = degraded || anyNaN(absolute)
 
 	centre := n/2 + (n/2)*n
 	centreHeight := absolute[centre]
@@ -312,6 +352,9 @@ func (s *GridService) sampleSource(ctx context.Context, src tileSource, z int, a
 			lx := clampInt(int(math.Floor(px-float64(tx)*tilePx)), 0, tilePx-1)
 			ly := clampInt(int(math.Floor(py-float64(ty)*tilePx)), 0, tilePx-1)
 			h := src.decode(tile, (ly*tilePx+lx)*4)
+			if src.name == "Terrain Tiles" {
+				h = terrainSample(tile, lx, ly)
+			}
 			if !math.IsNaN(h) && !math.IsInf(h, 0) {
 				absolute[k] = h
 				filled++
@@ -322,7 +365,7 @@ func (s *GridService) sampleSource(ctx context.Context, src tileSource, z int, a
 }
 
 // loadTiles downloads and decodes the tile range concurrently (bounded by fetchWorkers). Missing
-// tiles (not found) and corrupt images are skipped; other download failures set degraded.
+// tiles (not found) are skipped; corrupt images and other download failures set degraded.
 func (s *GridService) loadTiles(ctx context.Context, src tileSource, z, tx0, tx1, ty0, ty1 int) (tiles map[tileKey]rgbaTile, degraded bool, err error) {
 	var keys []tileKey
 	for ty := ty0; ty <= ty1; ty++ {
@@ -360,6 +403,7 @@ func (s *GridService) loadTiles(ctx context.Context, src tileSource, z, tx0, tx1
 			case ferr == nil:
 				tile, derr = decodeTile(raw)
 				if derr != nil {
+					bad = true
 					s.logger.Warn("elevation tile decode failed", "source", src.name, "url", url, "err", derr)
 				}
 			case errors.Is(ferr, upstream.ErrNotFound):

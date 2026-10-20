@@ -104,7 +104,7 @@ web/                  frontend (embedded into the binary through web/embed.go)
 | GET | `/api/city?lat=&lon=&size=&seed=` | Buildings, roads, railways, water, green, trees, viewpoints, stats. Size is one of 200/300/400/600/800/1000. |
 | GET | `/api/surroundings?lat=&lon=&size=&far=` | Simplified building footprints. `far` is 2000 or 4000. |
 | GET | `/api/elevation?lat=&lon=&size=&n=` | Height grid relative to the centre, plus its source |
-| GET | `/api/places` | Built-in candidate places (283), each with its region `group`; the page lists them as one dropdown group per region |
+| GET | `/api/places` | Built-in candidate places (30), each with its region `group`; the page lists them as one dropdown group per region |
 | GET | `/api/places/search?q=` | Built-in matches, then Nominatim |
 | GET | `/api/locate?q=` | A parsed link or coordinate |
 | POST | `/api/locate/file` | Location from a KML/KMZ/GeoJSON upload (multipart field `file`) |

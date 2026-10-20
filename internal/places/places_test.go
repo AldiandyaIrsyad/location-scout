@@ -78,20 +78,20 @@ func names(ps []Place) []string {
 func TestCandidatesEmbeddedListOrderAndCopy(t *testing.T) {
 	s := newService(t, offline())
 	c := s.Candidates()
-	if len(c) != 283 {
-		t.Fatalf("got %d candidates, want 283", len(c))
+	if len(c) != 30 {
+		t.Fatalf("got %d candidates, want 30", len(c))
 	}
-	if c[0] != (Place{Name: "Shibuya Crossing, Tokyo", Lat: 35.6595, Lon: 139.7005, Group: "Japan"}) {
+	if c[0] != (Place{Name: "Eiffel Tower, Paris", Lat: 48.8584, Lon: 2.2945, Group: "Global"}) {
 		t.Fatalf("first candidate = %+v", c[0])
 	}
 	last := c[len(c)-1]
-	if last != (Place{Name: "Wellington (New Zealand)", Lat: -41.2915, Lon: 174.7765, Group: "Oceania"}) {
+	if last != (Place{Name: "Gedung Sate, Bandung", Lat: -6.9025, Lon: 107.6186, Group: "Indonesia"}) {
 		t.Fatalf("last candidate = %+v", last)
 	}
 
 	// The returned slice is a copy: mutating it must not change the service.
 	c[0].Name = "changed"
-	if s.Candidates()[0].Name != "Shibuya Crossing, Tokyo" {
+	if s.Candidates()[0].Name != "Eiffel Tower, Paris" {
 		t.Fatal("Candidates returned a shared slice")
 	}
 }
@@ -141,12 +141,10 @@ func TestLocalSearch(t *testing.T) {
 		contains []string // all of these must be present
 	}{
 		{name: "prefix first", query: "shibuya", wantTop: "Shibuya Crossing, Tokyo"},
-		{name: "case insensitive", query: "KABUKICHO", wantTop: "Kabukicho, Shinjuku, Tokyo"},
-		{name: "accent folded query", query: "medellin", contains: []string{"Medellín (Colombia)"}},
-		{name: "accent in query", query: "Montréal", contains: []string{"Montréal (Canada)"}},
-		{name: "tokens in any order", query: "tokyo tower", wantTop: "Tokyo Tower"},
-		{name: "all tokens, not substring", query: "shinjuku kabukicho", contains: []string{"Kabukicho, Shinjuku, Tokyo"}},
-		{name: "polish letter", query: "krakow", contains: []string{"Kraków (Poland)"}},
+		{name: "case insensitive", query: "AKIHABARA", wantTop: "Akihabara, Tokyo"},
+		{name: "accent in query", query: "Éiffel", contains: []string{"Eiffel Tower, Paris"}},
+		{name: "tokens in any order", query: "seoul namsan", wantTop: "Namsan Tower, Seoul"},
+		{name: "all tokens, not substring", query: "tokyo akihabara", contains: []string{"Akihabara, Tokyo"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -176,12 +174,12 @@ func TestLocalSearch(t *testing.T) {
 
 func TestLocalSearchLimitAndNoMatch(t *testing.T) {
 	s := newService(t, offline())
-	got, err := s.Search(context.Background(), "square")
+	got, err := s.Search(context.Background(), "a")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != maxLocalMatches {
-		t.Fatalf("got %d results for 'square', want %d", len(got), maxLocalMatches)
+		t.Fatalf("got %d results for 'a', want %d", len(got), maxLocalMatches)
 	}
 
 	none, err := s.Search(context.Background(), "zzzz-no-such-place")
@@ -209,8 +207,8 @@ func TestEmptyQueryDoesNotCallUpstream(t *testing.T) {
 
 func TestNominatimMergeAndDedupe(t *testing.T) {
 	body := `[
-	  {"display_name": "Tokyo Station Hotel", "lat": "35.6815", "lon": "139.7663"},
-	  {"display_name": "Tokyo Station", "lat": "10", "lon": "10"},
+	  {"display_name": "Times Square Hotel", "lat": "40.7583", "lon": "-73.9853"},
+	  {"display_name": "Times Square, New York", "lat": "10", "lon": "10"},
 	  {"display_name": "Tokyo Dome", "lat": "35.7056", "lon": "139.7519"},
 	  {"display_name": "Tokyo Dome", "lat": "35.7056", "lon": "139.7519"},
 	  {"name": "Nowhere", "lat": "not-a-number", "lon": "1"},
@@ -218,24 +216,24 @@ func TestNominatimMergeAndDedupe(t *testing.T) {
 	]`
 	s := newService(t, nominatimReply(body))
 
-	got, err := s.Search(context.Background(), "tokyo station")
+	got, err := s.Search(context.Background(), "times square")
 	if err != nil {
 		t.Fatal(err)
 	}
-	local, _ := newService(t, offline()).Search(context.Background(), "tokyo station")
+	local, _ := newService(t, offline()).Search(context.Background(), "times square")
 	if len(got) < len(local)+2 {
 		t.Fatalf("got %d results, want local %d plus remote", len(got), len(local))
 	}
-	if got[0].Name != "Tokyo Station" {
+	if got[0].Name != "Times Square, New York" {
 		t.Fatalf("local match must come first, got %v", names(got))
 	}
 
-	// Remote hits: "Tokyo Station Hotel" is within 150 m of the local Tokyo Station (dropped),
-	// the second "Tokyo Station" has the same normalized name (dropped), the first "Tokyo Dome" is
+	// Remote hits: "Times Square Hotel" is within 150 m of the local Times Square (dropped),
+	// the second "Times Square, New York" has the same normalized name (dropped), the first "Tokyo Dome" is
 	// kept, the second copy is dropped as a duplicate of it, and the name-only entry is kept with its
 	// name. Bad coordinates are dropped.
 	for _, p := range got {
-		if p.Name == "Tokyo Station Hotel" {
+		if p.Name == "Times Square Hotel" {
 			t.Fatalf("near-duplicate by distance was not removed: %v", names(got))
 		}
 	}
@@ -266,11 +264,11 @@ func TestNominatimRequestURL(t *testing.T) {
 
 func TestUpstreamFailureFallsBackToLocal(t *testing.T) {
 	s := newService(t, offline())
-	local, _ := s.Search(context.Background(), "tokyo tower")
+	local, _ := s.Search(context.Background(), "namsan tower")
 
 	// Non-JSON body from upstream: also a fallback, not an error.
 	bad := newService(t, nominatimReply(`<html>rate limited</html>`))
-	got, err := bad.Search(context.Background(), "tokyo tower")
+	got, err := bad.Search(context.Background(), "namsan tower")
 	if err != nil {
 		t.Fatalf("upstream failure must not be an error, got %v", err)
 	}
@@ -280,7 +278,7 @@ func TestUpstreamFailureFallsBackToLocal(t *testing.T) {
 
 	// A 404 from upstream is handled the same way.
 	nf := newService(t, &fakeFetcher{route: func(string) ([]byte, error) { return nil, upstream.ErrNotFound }})
-	got, err = nf.Search(context.Background(), "tokyo tower")
+	got, err = nf.Search(context.Background(), "namsan tower")
 	if err != nil || len(got) != len(local) {
 		t.Fatalf("404 fallback: %v, %v", names(got), err)
 	}

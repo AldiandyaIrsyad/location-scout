@@ -6,6 +6,8 @@ import { MiniMap } from './map.js';
 import { toLocal, toLatLon } from './geo.js';
 import { fetchCity, fetchSurroundings, findViewpoints } from './osm.js';
 import { fetchElevation } from './elevation.js';
+import { fitBounds } from './camera-fit.js';
+import { inArea } from './surfaces.js';
 import { parseLocation, parseKmlFile } from './coords.js';
 import { loadPlaces, searchPlaces } from './places.js';
 import { FORMATS, makeFile, suggestedName, prepareSave, commitSave, chooseFolder, currentFolder, supportsFolders } from './save.js';
@@ -79,6 +81,8 @@ const minimap = new MiniMap($('map'), {
 function resize() {
   const r = canvas.parentElement.getBoundingClientRect();
   renderer.resize(Math.max(1, r.width), Math.max(1, r.height));
+  const preset = $('cameraSelect')?.value;
+  if (state.city && ['overview', 'top', 'wide'].includes(preset)) applyPreset(preset);
   renderer.applyCameraPose(rig.getPose());
   updateMapCamera();
   requestRender();
@@ -254,7 +258,12 @@ const nextFrame = () => new Promise((r) => {
 });
 
 function safeViewpoints(city) {
-  try { return findViewpoints(city) || []; } catch (err) { console.warn(err); return []; }
+  try {
+    return (findViewpoints(city) || []).filter((vp) => {
+      const [x, y] = vp.position, eye = vp.eyeHeight ?? 1.6;
+      return !(city.buildings || []).some((b) => b.height > eye && (b.minHeight || 0) < eye && inArea(x, y, b));
+    });
+  } catch (err) { console.warn(err); return []; }
 }
 
 $('loadRetryBtn').addEventListener('click', () => build());
@@ -278,6 +287,7 @@ function showStats() {
   if (s.bytes) parts.push(t('stats.mapData', { kb: Math.round(s.bytes / 1024) }));
   if (state.surroundings) parts.push(t('stats.surr', { km: state.far, n: state.surroundings.buildings.length }));
   $('stats').textContent = parts.join(' · ');
+  $('elevationCredit').textContent = state.elevation?.source ? `Elevation: ${state.elevation.source}` : 'Elevation unavailable (flat terrain)';
 }
 
 // ---------------------------------------------------------------------------
@@ -307,14 +317,21 @@ function fillCameraSelect() {
   if ([...sel.options].some((o) => o.value === keep)) sel.value = keep;
 }
 
-function groundAt(x, y) { return state.city ? renderer.groundHeight(x, y) : 0; }
+function groundAt(x, y) { return state.city ? renderer.surfaceHeight(x, y) : 0; }
 
 function applyPreset(value) {
   const size = state.size;
-  const center = new THREE.Vector3(0, groundAt(0, 0), 0);
-  if (value === 'overview') rig.setOrbit({ target: center, distance: size * 1.35, yaw: 0.55, pitch: -0.62 });
-  else if (value === 'top') rig.setOrbit({ target: center, distance: size * 1.75, yaw: 0, pitch: -Math.PI / 2 + 1e-3 });
-  else if (value === 'wide') rig.setOrbit({ target: center, distance: Math.max(size * 2.2, state.far * 1000 * 0.55), yaw: 0.55, pitch: -0.32 });
+  if (['overview', 'top', 'wide'].includes(value)) {
+    const bounds = renderer.nearBounds();
+    if (value === 'wide') {
+      const half = Math.max(size / 2, state.far * 500);
+      bounds.min[0] = Math.min(bounds.min[0], -half); bounds.max[0] = Math.max(bounds.max[0], half);
+      bounds.min[2] = Math.min(bounds.min[2], -half); bounds.max[2] = Math.max(bounds.max[2], half);
+    }
+    const frame = fitBounds(bounds, { fov: renderer.camera.fov, aspect: renderer.camera.aspect,
+      yaw: value === 'top' ? 0 : 0.55, pitch: value === 'top' ? -Math.PI / 2 + 0.001 : value === 'wide' ? -0.32 : -0.62 });
+    rig.setOrbit({ ...frame, target: new THREE.Vector3(...frame.target) });
+  }
   else if (value.startsWith('vp')) {
     const vp = state.viewpoints[Number(value.slice(2))];
     if (!vp) return;
@@ -342,14 +359,9 @@ function applyInitialView() {
     rig.setOrbit({ target: new THREE.Vector3(0, groundAt(0, 0), 0), distance: range, yaw: THREE.MathUtils.degToRad(v.heading ?? 0), pitch: -(Math.PI / 2 - tilt) });
     $('cameraSelect').value = 'free';
   } else {
-    const first = state.viewpoints.findIndex((vp) => vp.kind === 'crossing');
-    if (first >= 0 && state.style !== 'clay') {
-      $('cameraSelect').value = `vp${first}`;
-      applyPreset(`vp${first}`);
-    } else {
-      $('cameraSelect').value = 'overview';
-      applyPreset('overview');
-    }
+    // Named places should open with their scene in frame. Street viewpoints remain optional.
+    $('cameraSelect').value = 'overview';
+    applyPreset('overview');
   }
 }
 

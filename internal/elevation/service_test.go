@@ -177,6 +177,40 @@ func TestDecodeTerrarium(t *testing.T) {
 	}
 }
 
+func TestTerrainSampleCoastalSpikes(t *testing.T) {
+	makeTile := func(h float64) rgbaTile {
+		px := make(rgbaTile, tilePx*tilePx*4)
+		v := encodeTerrarium(h)
+		for o := 0; o < len(px); o += 4 {
+			copy(px[o:o+4], v[:])
+		}
+		return px
+	}
+	set := func(px rgbaTile, x, y int, h float64) {
+		v := encodeTerrarium(h)
+		copy(px[(y*tilePx+x)*4:], v[:])
+	}
+	t.Run("isolated corrupt streak is replaced by local heights", func(t *testing.T) {
+		px := makeTile(6)
+		for y := 125; y <= 131; y++ {
+			set(px, 128, y, -7641.92578125)
+		}
+		if got := terrainSample(px, 128, 128); got != 6 {
+			t.Fatalf("got %v, want 6", got)
+		}
+	})
+	for _, h := range []float64{-430, -100, -6000, 1000} {
+		if got := terrainSample(makeTile(h), 128, 128); got != h {
+			t.Fatalf("valid %v changed to %v", h, got)
+		}
+	}
+	for _, p := range [][]uint8{{0, 0, 0, 255}, {128, 0, 0, 0}} {
+		if got := decodeTerrarium(p, 0); !math.IsNaN(got) {
+			t.Fatalf("missing pixel decoded as %v", got)
+		}
+	}
+}
+
 func TestDecodeGSI(t *testing.T) {
 	tests := []struct {
 		name string
@@ -478,7 +512,7 @@ func TestResultCacheAvoidsRefetch(t *testing.T) {
 		}
 	}
 
-	const wantKey = "elev:v1:37.42000:-122.08000:200:9"
+	const wantKey = "elev:v3:37.42000:-122.08000:200:9"
 	if len(results.keys) != 1 || results.keys[0] != wantKey {
 		t.Fatalf("result cache keys = %v, want [%s]", results.keys, wantKey)
 	}
@@ -508,6 +542,109 @@ func TestTransientTileErrorIsNotCached(t *testing.T) {
 	}
 	if f.callCount() == before {
 		t.Fatal("second call did not retry the upstream")
+	}
+}
+
+func TestCorruptTileAndUnresolvedSamplesAreNotCached(t *testing.T) {
+	const lat, lon = 37.42, -122.08
+	const size, n = 200.0, 17
+	surface := terrain(lat, lon)
+	centerX := int(math.Floor(lonToPx(lon, 15) / tilePx))
+	centerY := int(math.Floor(latToPx(lat, 15) / tilePx))
+	var mu sync.Mutex
+	corrupted := false
+	f := &fakeFetcher{route: func(rawURL string) ([]byte, error) {
+		z, x, y := parseTileURL(t, rawURL, terrariumPrefix)
+		if x == centerX && y == centerY {
+			mu.Lock()
+			first := !corrupted
+			corrupted = true
+			mu.Unlock()
+			if first {
+				return []byte("not a png"), nil
+			}
+		}
+		return renderTile(z, x, y, func(la, lo float64) [4]uint8 {
+			return encodeTerrarium(surface(la, lo))
+		}), nil
+	}}
+	results := newMemCache()
+	svc := newTestService(f, results)
+
+	_, err := svc.Grid(context.Background(), lat, lon, size, n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results.keys) != 0 {
+		t.Fatalf("incomplete grid was cached: %v", results.keys)
+	}
+	firstCalls := f.callCount()
+
+	second, err := svc.Grid(context.Background(), lat, lon, size, n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.callCount() <= firstCalls {
+		t.Fatal("healthy request reused the incomplete result instead of rebuilding")
+	}
+	if len(results.keys) != 1 || results.keys[0] != "elev:v3:37.42000:-122.08000:200:17" {
+		t.Fatalf("result cache keys = %v, want one v3 entry", results.keys)
+	}
+	if second.Source == "" || math.IsInf(second.BaseElevation, 0) || math.IsNaN(second.BaseElevation) {
+		t.Fatalf("rebuilt grid metadata = source %q base %v, want finite terrain", second.Source, second.BaseElevation)
+	}
+	hasNegative := false
+	for k, h := range second.Heights {
+		if math.IsNaN(float64(h)) || math.IsInf(float64(h), 0) {
+			t.Fatalf("rebuilt heights[%d] = %v, want finite", k, h)
+		}
+		if h < 0 {
+			hasNegative = true
+		}
+	}
+	if !hasNegative {
+		t.Fatal("rebuilt terrain lost valid negative relative heights")
+	}
+}
+
+func TestMissingSamplesWithValidCenterAreNotCached(t *testing.T) {
+	const lat, lon = 37.42, -122.08
+	surface := terrain(lat, lon)
+	incomplete := true // changed only after all workers in the first Grid call have joined
+	f := &fakeFetcher{route: func(rawURL string) ([]byte, error) {
+		z, x, y := parseTileURL(t, rawURL, terrariumPrefix)
+		return renderTile(z, x, y, func(la, lo float64) [4]uint8 {
+			point := geo.ToLocal(la, lo, lat, lon)
+			if incomplete && point[0] > 25 {
+				return [4]uint8{0, 0, 0, 255}
+			}
+			return encodeTerrarium(surface(la, lo))
+		}), nil
+	}}
+	results := newMemCache()
+	svc := newTestService(f, results)
+	first, err := svc.Grid(context.Background(), lat, lon, 200, 17)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Source == "" {
+		t.Fatal("test must retain a valid center")
+	}
+	if len(results.keys) != 0 {
+		t.Fatal("partially missing grid was cached")
+	}
+	calls := f.callCount()
+	incomplete = false
+	second, err := svc.Grid(context.Background(), lat, lon, 200, 17)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.callCount() <= calls || len(results.keys) != 1 {
+		t.Fatal("healthy source did not replace the incomplete grid")
+	}
+	const eastEdge = 16 + 8*17
+	if first.Heights[eastEdge] != 0 || second.Heights[eastEdge] < 5 {
+		t.Fatalf("east edge did not recover: %v -> %v", first.Heights[eastEdge], second.Heights[eastEdge])
 	}
 }
 

@@ -13,6 +13,8 @@ import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometr
 import { sampleHeight } from './elevation.js';
 import { EffectStack } from './effects.js';
 import { landmarksFor } from './landmarks.js';
+import { makeSurfaces } from './surfaces.js';
+import { viewDepthRange } from './camera-fit.js';
 
 const DEG = Math.PI / 180;
 const UP = [0, 1, 0];
@@ -1378,6 +1380,7 @@ export class CityRenderer {
     // Data
     this._city = null;
     this._elev = null;
+    this._surfaces = null;
     this._surr = null;
     this._meshes = []; // { mesh, role }
     this._pickables = [];
@@ -1586,17 +1589,18 @@ export class CityRenderer {
    * yaw: radians, 0 = looking north (-Z), positive = turning right (east).
    * pitch: radians, positive = looking up. Stored on camera.userData for controls.js.
    */
-  applyCameraPose({ position, yaw, pitch }) {
+  applyCameraPose({ position, yaw, pitch, distance }) {
     if (position) this.camera.position.copy(position);
     if (yaw !== undefined) this.camera.userData.yaw = yaw;
     if (pitch !== undefined) this.camera.userData.pitch = pitch;
-    this._applyPose();
+    this._viewDistance = Number.isFinite(distance) ? distance : 0;
+    this._updateDepthRange();
   }
 
   _applyPose() {
     const cam = this.camera;
     const yaw = cam.userData.yaw || 0;
-    const pitch = clamp(cam.userData.pitch || 0, -1.45, 1.45);
+    const pitch = clamp(cam.userData.pitch || 0, -Math.PI / 2 + 1e-3, Math.PI / 2 - 0.02);
     cam.updateProjectionMatrix();
     if (this.options.straightVerticals) {
       // Camera stays level; aiming up/down is done with a lens shift so verticals stay parallel.
@@ -1610,13 +1614,12 @@ export class CityRenderer {
     cam.updateMatrixWorld(true);
   }
 
-  /** Far plane and fog scale with detailDistance (0.25..3, i.e. 25%..300%): far = 1200 m * dd. */
+  /** Keep the framed scene inside the far plane and ahead of the fog, including tall landmarks. */
   _updateDepthRange() {
-    const dd = clamp(this.options.detailDistance ?? 1, 0.25, 3);
-    const far = 1200 * dd;
+    const { far, fogNear, fogFar } = viewDepthRange(this._viewDistance, this._sceneRadius, this.options.detailDistance ?? 1);
     this.camera.far = far;
-    this._fogFar = far * 0.95;
-    this._fogNear = far * 0.55;
+    this._fogFar = fogFar;
+    this._fogNear = fogNear;
     this.camera.updateProjectionMatrix();
     this._applyFog();
     if (this._mats) this._mats.ndMat.uniforms.uFar.value = far;
@@ -1663,8 +1666,29 @@ export class CityRenderer {
 
   /** Terrain height at a local point (metres relative to the centre elevation). */
   groundHeight(x, y) {
+    if (this._surfaces) return this._surfaces.groundAt(x, y);
+    return this._terrainHeight(x, y);
+  }
+
+  _terrainHeight(x, y) {
     if (!this.options.terrain || !this._elev) return 0;
     return sampleHeight(this._elev, x, y);
+  }
+
+  /** Top walkable surface for pin placement; ordinary terrain remains below a bridge. */
+  surfaceHeight(x, y) {
+    return this._surfaces?.surfaceAt(x, y) ?? this.groundHeight(x, y);
+  }
+
+  /** Near-area bounds only: distant buildings must not shrink the initial view. */
+  nearBounds() {
+    const box = new THREE.Box3();
+    for (const { mesh } of this._meshes) {
+      if (mesh.userData.surroundings || !['ground', 'walls', 'roofs', 'asphalt', 'footways'].includes(mesh.name)) continue;
+      mesh.geometry.computeBoundingBox();
+      box.union(mesh.geometry.boundingBox);
+    }
+    return box.isEmpty() ? { min: [-150, 0, -150], max: [150, 10, 150] } : { min: box.min.toArray(), max: box.max.toArray() };
   }
 
   /** Local [x, y] under a normalised device coordinate, or null. */
@@ -1703,7 +1727,7 @@ export class CityRenderer {
   }
 
   /** Flat-shaded ribbon along a polyline (ground-following). Optionally records its outline. */
-  _ribbon(batch, path, w, yOff, col, outline = false) {
+  _ribbon(batch, path, w, yOff, col, outline = false, heightAt = null) {
     const n = path.length;
     if (n < 2) return;
     const segN = [];
@@ -1749,7 +1773,7 @@ export class CityRenderer {
       L.push([px + nx * hw, py + ny * hw]);
       R.push([px - nx * hw, py - ny * hw]);
     }
-    const V = (p) => [p[0], this.groundHeight(p[0], p[1]) + yOff, -p[1]];
+    const V = (p) => [p[0], (heightAt ? heightAt(p[0], p[1]) : this.groundHeight(p[0], p[1])) + yOff, -p[1]];
     for (let i = 0; i < n - 1; i++) {
       batch.quad(V(L[i]), V(R[i]), V(R[i + 1]), V(L[i + 1]), UP, col);
       if (outline) {
@@ -1769,9 +1793,10 @@ export class CityRenderer {
   }
 
   /** Flat polygon (with holes) lying on the ground. */
-  _flatPoly(batch, outer, holes, yOff, col, outline = false) {
+  _flatPoly(batch, outer, holes, yOff, col, outline = false, heightAt = null) {
     const { pts, tris } = triangulate(outer, holes);
-    const V = (p) => [p.x, this.groundHeight(p.x, p.y) + yOff, -p.y];
+    const H = heightAt || ((x, y) => this.groundHeight(x, y));
+    const V = (p) => [p.x, H(p.x, p.y) + yOff, -p.y];
     for (const t of tris) {
       batch.tri(V(pts[t[0]]), V(pts[t[1]]), V(pts[t[2]]), UP, col);
     }
@@ -1782,8 +1807,8 @@ export class CityRenderer {
         for (let i = 0; i < ring.length; i++) {
           const p = ring[i];
           const q = ring[(i + 1) % ring.length];
-          const a = [p[0], this.groundHeight(p[0], p[1]) + yOff + 0.01, -p[1]];
-          const b = [q[0], this.groundHeight(q[0], q[1]) + yOff + 0.01, -q[1]];
+          const a = [p[0], H(p[0], p[1]) + yOff + 0.01, -p[1]];
+          const b = [q[0], H(q[0], q[1]) + yOff + 0.01, -q[1]];
           this._pushSeg(a, b);
         }
       }
@@ -1810,6 +1835,9 @@ export class CityRenderer {
     for (const b of list) {
       const outer = b.outer;
       if (!outer || outer.length < 3) continue;
+      // Zero is a valid mapped top height (often an underground structure), not a missing value.
+      const mappedHeight = Number.isFinite(b.height) ? b.height : 6;
+      if (mappedHeight <= 0) continue;
       const holes = (b.holes || []).filter((h) => h && h.length > 2);
       const r = rng(hashStr(String(b.id ?? outer.length)));
 
@@ -1826,12 +1854,14 @@ export class CityRenderer {
       // on a slope the building stands on the high side (walls reach down to the low side), so no corner
       // ends up buried; capped so one noisy elevation cell cannot lift it far
       groundC = Math.max(groundC, Math.min(groundMax, groundC + 3));
-      const minH = Math.max(0, b.minHeight || 0);
-      const height = Math.max(b.height || 6, minH + 2);
-      const flat = surroundings || lowPoly || !b.roofShape || b.roofShape === 'flat';
+      const minH = Math.max(0, Number.isFinite(b.minHeight) ? b.minHeight : 0);
+      const height = Math.max(mappedHeight, minH + 0.05);
+      // Procedural roof primitives cannot preserve courtyards. Unknown shapes such as OSM
+      // "many" must keep the mapped cap rather than becoming a bounding-box gable.
+      const flat = surroundings || lowPoly || holes.length > 0 || !['pyramidal', 'hipped', 'gabled'].includes(b.roofShape);
       const roofH = flat ? 0 : clamp(b.roofHeight ?? 3, 0.5, Math.max(0.5, height - minH - 1.5));
       const base = groundC + minH;
-      const bottom = Math.min(base, groundMin + minH);
+      const bottom = minH > 0 ? base : Math.min(base, groundMin);
       const topAbs = groundC + height;
       const wallTop = topAbs - roofH;
 
@@ -1888,7 +1918,7 @@ export class CityRenderer {
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const z = pos.getZ(i);
-      pos.setY(i, useTerrain ? sampleHeight(this._elev, x, -z) : 0);
+      pos.setY(i, this.groundHeight(x, -z));
       cols[i * 3] = gc[0];
       cols[i * 3 + 1] = gc[1];
       cols[i * 3 + 2] = gc[2];
@@ -1944,15 +1974,16 @@ export class CityRenderer {
       const major = MAJOR_KINDS.has(kind);
       const w = r.width || (foot ? 2 : 6);
       const path = resamplePolyline(pts, 4);
-      entries.push({ pts, kind, foot, major, w, lanes: r.lanes || 0 });
+      const heightAt = (x, y) => this._surfaces.heightFor(r, x, y);
+      entries.push({ pts, kind, foot, major, w, lanes: r.lanes || 0, bridge: r.bridge, layer: r.layer || 0, heightAt });
 
       if (foot) {
-        this._ribbon(walk, path, Math.max(w, 1.5), 0.06, colArr(PAL.sidewalk));
+        this._ribbon(walk, path, Math.max(w, 1.5), 0.06, colArr(PAL.sidewalk), false, heightAt);
         continue;
       }
       // sidewalk strip underneath the carriageway
-      this._ribbon(sidewalks, path, w + 5, 0.04, colArr(PAL.sidewalk));
-      this._ribbon(asphalt, path, w, 0.07, colArr(major ? PAL.road : PAL.roadMinor), true);
+      this._ribbon(sidewalks, path, w + 5, 0.04, colArr(PAL.sidewalk), false, heightAt);
+      this._ribbon(asphalt, path, w, 0.07, colArr(major ? PAL.road : PAL.roadMinor), true, heightAt);
     }
 
     if (details) {
@@ -1963,12 +1994,12 @@ export class CityRenderer {
         // dashed centre line on wider / multi-lane roads
         if ((e.major || e.lanes >= 2) && e.w >= 7) {
           for (const dash of polyDashes(path, 3, 6)) {
-            this._ribbon(marks, dash, 0.22, 0.09, white);
+            this._ribbon(marks, dash, 0.22, 0.09, white, false, e.heightAt);
           }
         }
 
         // utility poles every ~30 m along residential-type streets
-        if (RESIDENTIAL_KINDS.has(e.kind) && this.options.detailPoles !== false) {
+        if (!e.bridge && e.layer <= 0 && RESIDENTIAL_KINDS.has(e.kind) && this.options.detailPoles !== false) {
           for (const s of samplePoly(path, 30, 15)) {
             const o = e.w / 2 + 0.8;
             const x = s.x + s.nx * o;
@@ -2045,9 +2076,9 @@ export class CityRenderer {
     const col = colArr(PAL.guard);
     const POST_H = 1.0;
     for (const e of entries) {
-      if (!RAIL_KINDS.has(e.kind) || !e.pts || e.pts.length < 2) continue;
+      if ((!RAIL_KINDS.has(e.kind) && !e.bridge) || !e.pts || e.pts.length < 2) continue;
       for (const side of [-1, 1]) {
-        const off = side * (e.w / 2 + 2.3);
+        const off = side * (e.w / 2 + (e.bridge && e.foot ? -0.1 : 2.3));
         const posts = [];
         for (const s of samplePoly(e.pts, 2, 1)) {
           const x = s.x + s.nx * off;
@@ -2065,7 +2096,7 @@ export class CityRenderer {
           const a = posts[i];
           if (!a) continue;
           const q = [[-0.05, -0.05], [0.05, -0.05], [0.05, 0.05], [-0.05, 0.05]].map(([dx, dy]) => [a[0] + dx, a[1] + dy]);
-          this._prism(batch, q, 0, POST_H, col);
+          this._prism(batch, q, 0, POST_H, col, e.heightAt);
           const b = posts[i + 1];
           if (!b) continue;
           const dx = b[0] - a[0];
@@ -2076,15 +2107,15 @@ export class CityRenderer {
           const nx = (-dy / L) * 0.025;
           const ny = (dx / L) * 0.025;
           const bar = [[a[0] - nx, a[1] - ny], [b[0] - nx, b[1] - ny], [b[0] + nx, b[1] + ny], [a[0] + nx, a[1] + ny]];
-          for (const hz of [0.5, 0.9]) this._prism(batch, bar, hz - 0.025, hz + 0.025, col);
+          for (const hz of [0.5, 0.9]) this._prism(batch, bar, hz - 0.025, hz + 0.025, col, e.heightAt);
         }
       }
     }
   }
 
   /** Axis-aligned prism over a quad (local [x, y] corners in order) from h0 to h1 above the ground. */
-  _prism(batch, quad, h0, h1, col) {
-    const V = (p, h) => [p[0], this.groundHeight(p[0], p[1]) + h, -p[1]];
+  _prism(batch, quad, h0, h1, col, heightAt = null) {
+    const V = (p, h) => [p[0], (heightAt ? heightAt(p[0], p[1]) : this.groundHeight(p[0], p[1])) + h, -p[1]];
     let cx = 0;
     let cy = 0;
     for (const p of quad) {
@@ -2197,7 +2228,7 @@ export class CityRenderer {
     const gb = new Batch();
     const ab = new Batch();
     for (const a of water || []) {
-      if (a.outer && a.outer.length >= 3) this._flatPoly(wb, a.outer, a.holes, 0.05, colArr(PAL.water), true);
+      if (a.outer && a.outer.length >= 3) this._flatPoly(wb, a.outer, a.holes, 0, colArr(PAL.water), true, () => this._surfaces.water.get(a));
     }
     for (const a of green || []) {
       if (!a.outer || a.outer.length < 3) continue;
@@ -2381,7 +2412,7 @@ export class CityRenderer {
     const dens = Math.max(0, Math.min(3, Number(opt.treeDensity ?? 100) / 100));
     let pool = trees || [];
     if (dens < 1) pool = pool.filter((_, i) => rng(hashStr(`treethin:${i}`))() < dens);
-    const pts = pool.filter((t) => this._clearOf(t[0], t[1], 4.5));
+    const pts = pool.filter((t) => this._clearOf(t[0], t[1], 4.5) && this._surfaces.waterHeightAt(t[0], t[1]) === null);
     if (dens > 1) pts.push(...this._streetTrees((dens - 1) / 2));
     pts.length = Math.min(pts.length, 40000);
     const n = pts.length;
@@ -2611,7 +2642,7 @@ export class CityRenderer {
     const out = [];
     const c = this._city.center || { lat: 0, lon: 0 };
     for (const rd of this._city.roads || []) {
-      if (!rd.points || rd.points.length < 2 || rd.tunnel) continue;
+      if (!rd.points || rd.points.length < 2 || rd.tunnel || rd.bridge || rd.layer > 0) continue;
       const foot = FOOT_KINDS.has(rd.kind || 'residential');
       if (foot) continue;
       const w = rd.width || 6;
@@ -2941,7 +2972,7 @@ export class CityRenderer {
       if (!rd.points || rd.points.length < 2 || rd.tunnel) continue;
       const kind = rd.kind || 'residential';
       const foot = FOOT_KINDS.has(kind);
-      entries.push({ pts: rd.points, kind, foot, major: MAJOR_KINDS.has(kind), w: rd.width || (foot ? 2 : 6), lanes: rd.lanes || 0, name: rd.name || '' });
+      entries.push({ pts: rd.points, kind, foot, major: MAJOR_KINDS.has(kind), w: rd.width || (foot ? 2 : 6), lanes: rd.lanes || 0, name: rd.name || '', bridge: rd.bridge, layer: rd.layer || 0, heightAt: (x, y) => this._surfaces.heightFor(rd, x, y) });
     }
     // OSM splits a street into many short ways; sample each chain of connected ways as one street so
     // people and cars are spread evenly instead of restarting at every way.
@@ -2951,23 +2982,24 @@ export class CityRenderer {
 
     const people = [];
     const cars = [];
-    const addPerson = (x, y, yaw, v, onRoad = false) => {
-      if (!this._clearOf(x, y, 2.5) || idx.inBuilding(x, y) || idx.inWater(x, y)) return;
+    const addPerson = (x, y, yaw, v, onRoad = false, heightAt = null) => {
+      const height = heightAt ? heightAt(x, y) : this.groundHeight(x, y);
+      if (!this._clearOf(x, y, 2.5) || idx.inBuilding(x, y) || (idx.inWater(x, y) && height <= this.groundHeight(x, y) + 0.3)) return;
       if (!onRoad && idx.onRoad(x, y, 0.3)) return;
       const scale = rp() < kidsP ? 0.62 + 0.1 * rp() : 0.93 + 0.13 * rp(); // a few children
-      people.push({ x, y, yaw, v, scale, cols: [rp(), rp(), rp()] });
+      people.push({ x, y, yaw, v, scale, height, cols: [rp(), rp(), rp()] });
     };
-    const addCar = (x, y, yaw, type, col) => {
+    const addCar = (x, y, yaw, type, col, heightAt = null) => {
       const big = type === 'bus';
       if (cars.some((e) => Math.hypot(e.x - x, e.y - y) < (big || e.type === 'bus' ? 7.5 : 4.8))) return;
       if (!this._clearOf(x, y, big ? 7 : 5)) return;
       const half = big ? 5 : 2.1; // nose and tail must stay out of buildings too
       const hx = Math.sin(yaw), hy = -Math.cos(yaw);
       for (const k of [-1, 0, 1]) if (idx.inBuilding(x + hx * half * k, y + hy * half * k)) return;
-      cars.push({ x, y, yaw, type, col });
+      cars.push({ x, y, yaw, type, col, height: heightAt ? heightAt(x, y) + 0.07 : this.groundHeight(x, y) });
     };
     // a circle of 2+ people facing each other, most of them gesturing
-    const addGroup = (cx, cy) => {
+    const addGroup = (cx, cy, heightAt = null) => {
       const n = 2 + Math.floor(rp() * (groupMax - 1));
       const R = 0.45 + 0.12 * n;
       const a0 = rp() * Math.PI * 2;
@@ -2975,7 +3007,7 @@ export class CityRenderer {
         const a = a0 + (k * Math.PI * 2) / n + (rp() - 0.5) * 0.4;
         const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
         const v = (k === 0 && gest > 0) || rp() < gest ? pick(TALK_VARIANTS, rp()) : pick(IDLE_VARIANTS, rp());
-        addPerson(x, y, yawOf(cx - x, cy - y) + (rp() - 0.5) * 0.5, v);
+        addPerson(x, y, yawOf(cx - x, cy - y) + (rp() - 0.5) * 0.5, v, false, heightAt);
       }
     };
     const carType = (e, u, allowBus) => {
@@ -3011,7 +3043,7 @@ export class CityRenderer {
               const s = (r() - 0.5) * Math.max(0, leg.w - 1);
               const a = (r() - 0.5) * 2 * (CROSS_HALF - 0.4);
               const dir = r() < 0.5 ? 1 : -1;
-              addPerson(leg.cx + px * s + leg.ux * a, leg.cy + py * s + leg.uy * a, yawOf(dir * px, dir * py) + (r() - 0.5) * 0.2, pick(WALK_VARIANTS, r()), true);
+              addPerson(leg.cx + px * s + leg.ux * a, leg.cy + py * s + leg.uy * a, yawOf(dir * px, dir * py) + (r() - 0.5) * 0.2, pick(WALK_VARIANTS, r()), true, e.heightAt);
             }
           }
           // cars waiting behind the stop line, in the lane heading into the junction
@@ -3028,7 +3060,7 @@ export class CityRenderer {
                 const hx = -s.tx, hy = -s.ty; // facing the junction
                 const type = carType(e, r(), k > 0);
                 if (!type) break;
-                addCar(s.x + hy * lat, s.y - hx * lat, yawOf(hx, hy) + (r() - 0.5) * 0.03, type, carColour(type, r()));
+                addCar(s.x + hy * lat, s.y - hx * lat, yawOf(hx, hy) + (r() - 0.5) * 0.03, type, carColour(type, r()), e.heightAt);
               }
             }
           }
@@ -3041,7 +3073,7 @@ export class CityRenderer {
               const s = side * (leg.w / 2 + 0.7 + 0.6 * r());
               const a = (r() - 0.5) * 2.4;
               const v = r() < 0.29 * gest ? pick(TALK_VARIANTS, r()) : pick(IDLE_VARIANTS, r());
-              addPerson(leg.cx + px * s + leg.ux * a, leg.cy + py * s + leg.uy * a, yawOf(-side * px, -side * py) + (r() - 0.5) * 0.5, v);
+              addPerson(leg.cx + px * s + leg.ux * a, leg.cy + py * s + leg.uy * a, yawOf(-side * px, -side * py) + (r() - 0.5) * 0.5, v, false, e.heightAt);
             }
           }
         }
@@ -3072,7 +3104,7 @@ export class CityRenderer {
           const roll = rp();
           if (roll < talkP) {
             const off = e.foot ? 0 : side * (e.w / 2 + 1.3);
-            addGroup(s.x + s.nx * off, s.y + s.ny * off);
+            addGroup(s.x + s.nx * off, s.y + s.ny * off, e.heightAt);
             continue;
           }
           // sidewalk band: 0.5-2.1 m from the curb (sidewalks are 2.5 m wide); footways: on the path
@@ -3080,7 +3112,7 @@ export class CityRenderer {
           if (roll < talkP + standP) {
             // standing alone: waiting, on the phone, or calling out to someone
             const v = rp() < 0.36 * gest ? pick(TALK_VARIANTS, rp()) : pick(IDLE_VARIANTS, rp());
-            addPerson(s.x + s.nx * off, s.y + s.ny * off, rp() * Math.PI * 2, v);
+            addPerson(s.x + s.nx * off, s.y + s.ny * off, rp() * Math.PI * 2, v, false, e.heightAt);
             continue;
           }
           // walking along the street, sometimes side by side
@@ -3088,7 +3120,7 @@ export class CityRenderer {
           const heading = yawOf(dir * s.tx, dir * s.ty);
           const pair = rp() < 0.12 + 0.13 * pT;
           for (const o of pair ? [-0.33, 0.33] : [0]) {
-            addPerson(s.x + s.nx * (off + o), s.y + s.ny * (off + o), heading + (rp() - 0.5) * 0.3, pick(WALK_VARIANTS, rp()));
+            addPerson(s.x + s.nx * (off + o), s.y + s.ny * (off + o), heading + (rp() - 0.5) * 0.3, pick(WALK_VARIANTS, rp()), false, e.heightAt);
           }
         }
       }
@@ -3116,7 +3148,7 @@ export class CityRenderer {
             // no parking near junctions; the red road's approach is left to the queue built above
             const nj = nearJunction(ei, x, y, dir * s.tx, dir * s.ty);
             if (parked ? nj.any < 15 : nj.red < CROSS_AT + CROSS_HALF + 3 || nj.redIn < 36) continue;
-            addCar(x, y, yawOf(dir * s.tx, dir * s.ty) + yawJit + (k ? (rc() - 0.5) * 0.06 : 0), type, col);
+            addCar(x, y, yawOf(dir * s.tx, dir * s.ty) + yawJit + (k ? (rc() - 0.5) * 0.06 : 0), type, col, e.heightAt);
           }
         }
       }
@@ -3156,9 +3188,9 @@ export class CityRenderer {
     const sc = new THREE.Vector3();
     const up = new THREE.Vector3(0, 1, 0);
     const col = new THREE.Color();
-    const place = (x, y, yaw, s) => {
+    const place = (x, y, yaw, s, height) => {
       q.setFromAxisAngle(up, yaw);
-      p.set(x, this.groundHeight(x, y), -y); // feet / wheels on the ground
+      p.set(x, height ?? this.groundHeight(x, y), -y);
       sc.set(s, s, s);
       return m4.compose(p, q, sc);
     };
@@ -3176,7 +3208,7 @@ export class CityRenderer {
       ['top', 'bottom', 'hair', 'fixed'].forEach((part, pi) => {
         const im = new THREE.InstancedMesh(geos[part], this._materialFor('people'), list.length);
         list.forEach((e, i) => {
-          im.setMatrixAt(i, place(e.x, e.y, e.yaw, e.scale));
+          im.setMatrixAt(i, place(e.x, e.y, e.yaw, e.scale, e.height));
           if (palettes[part]) im.setColorAt(i, col.set(pickWeighted(palettes[part], e.cols[pi])));
         });
         im.instanceMatrix.needsUpdate = true;
@@ -3192,7 +3224,7 @@ export class CityRenderer {
       if (!list.length) continue;
       const im = new THREE.InstancedMesh(this._carGeometry(type), this._materialFor('people'), list.length);
       list.forEach((e, i) => {
-        im.setMatrixAt(i, place(e.x, e.y, e.yaw, 1));
+        im.setMatrixAt(i, place(e.x, e.y, e.yaw, 1, e.height));
         im.setColorAt(i, col.set(e.col));
       });
       im.instanceMatrix.needsUpdate = true;
@@ -3227,6 +3259,10 @@ export class CityRenderer {
     this._disposeMeshes();
     const city = this._city;
     if (!city) return;
+    if (this._surfaceCity !== city || this._surfaceElevation !== this._elev || this._surfaceTerrain !== this.options.terrain) {
+      this._surfaces = makeSurfaces(city, this.options.terrain ? this._elev : null, (x, y) => this._terrainHeight(x, y));
+      this._surfaceCity = city; this._surfaceElevation = this._elev; this._surfaceTerrain = this.options.terrain;
+    }
     const opt = this.options;
     const size = city.size || 1000;
     this._sunDist = Math.max(400, size * 3);
@@ -3242,7 +3278,7 @@ export class CityRenderer {
       name: 'ground',
     });
     if (this._surr) {
-      const surrGeo = this._buildSurroundGround(size * 3, opt.terrain);
+      const surrGeo = this._buildSurroundGround(this._surr.farSize || this._elev?.size || size * 3, opt.terrain);
       const m = this._addMesh(surrGeo, 'surr-ground', 'surroundings', { cast: false, name: 'surroundings-ground' });
       if (m) m.userData.surroundings = true;
     }
@@ -3252,7 +3288,7 @@ export class CityRenderer {
     for (const part of roadParts) {
       if (!part.geo) continue;
       const group = DETAIL_PARTS.has(part.name) ? 'details' : 'roads';
-      this._addMesh(part.geo, part.role, group, { name: part.name });
+      this._addMesh(part.geo, part.role, group, { name: part.name, pickable: part.name === 'asphalt' || part.name === 'footways' });
     }
     const rail = this._buildRailways(city.railways || []);
     if (rail) this._addMesh(rail, 'rail', 'roads', { name: 'railways' });
@@ -3289,6 +3325,8 @@ export class CityRenderer {
     }
 
     this._updateShadowFlags();
+    const bounds = this.nearBounds();
+    this._sceneRadius = Math.hypot(...bounds.min.map((v, i) => bounds.max[i] - v)) / 2;
     this._updateDepthRange();
     this._syncLamps();
   }
@@ -4303,7 +4341,7 @@ const CROSS_HALF = 1.6;
 function findJunctions(entries) {
   const junc = new Map();
   entries.forEach((e, ei) => {
-    if (e.foot) return;
+    if (e.foot || e.bridge || e.layer > 0) return;
     e.pts.forEach((p, vi) => {
       const key = `${Math.round(p[0] * 2)},${Math.round(p[1] * 2)}`;
       let j = junc.get(key);

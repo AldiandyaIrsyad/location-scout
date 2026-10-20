@@ -17,7 +17,7 @@ export async function fetchCity({ lat, lon, size, seed = 0, signal, onProgress }
  */
 export async function fetchSurroundings({ lat, lon, size, farSize, signal, onProgress }) {
   onProgress?.('Fetching surrounding buildings');
-  return getJSON('api/surroundings', { lat, lon, size, far: farSize }, signal);
+  return getJSON('api/surroundings', { lat, lon, size, far: farSize }, signal).then((data) => ({ ...data, farSize }));
 }
 
 /** Camera viewpoints, computed by the server together with the city. */

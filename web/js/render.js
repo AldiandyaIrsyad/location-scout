@@ -1894,44 +1894,17 @@ export class CityRenderer {
         }
       }
 
-      // junctions: shared vertices between two or more drawn roads
-      const junc = new Map();
-      entries.forEach((e, ei) => {
-        if (e.foot) return;
-        e.pts.forEach((p, vi) => {
-          const key = `${Math.round(p[0] * 2)},${Math.round(p[1] * 2)}`;
-          let j = junc.get(key);
-          if (!j) {
-            j = { x: p[0], y: p[1], refs: [] };
-            junc.set(key, j);
-          }
-          j.refs.push({ ei, vi });
-        });
-      });
-      for (const j of junc.values()) {
-        const roadIds = new Set(j.refs.map((rf) => rf.ei));
-        if (roadIds.size < 2) continue;
+      // junctions: signals where a major road meets, a zebra crossing on every leg
+      for (const j of findJunctions(entries)) {
         juncPts.push([j.x, j.y]);
-        const majorCount = [...roadIds].filter((ei) => entries[ei].major).length;
-        if (majorCount >= 1) {
-          const spot = this._signalSpot(j, roadIds, entries);
+        if (j.signal) {
+          const spot = this._signalSpot(j, j.roads, entries);
           furniture.push(...this._signalAt(spot.x, spot.y, spot.ax, spot.ay));
           this._lampPts.push([spot.x, spot.y, 5.5]); // junction lamp on the signal pole (night, lamps on)
         }
-        for (const rf of j.refs) {
-          const e = entries[rf.ei];
-          const p = e.pts[rf.vi];
-          for (const nb of [e.pts[rf.vi - 1], e.pts[rf.vi + 1]]) {
-            if (!nb) continue;
-            const dx = nb[0] - p[0];
-            const dy = nb[1] - p[1];
-            const L = Math.hypot(dx, dy);
-            if (L < 10) continue; // too short for a crossing on this leg
-            const ux = dx / L;
-            const uy = dy / L;
-            this._crosswalk(marks, p[0] + ux * 7, p[1] + uy * 7, ux, uy, e.w, white);
-            if (japan) this._tactile(tact, p[0] + ux * 7, p[1] + uy * 7, ux, uy, e.w, yellow);
-          }
+        for (const leg of j.legs) {
+          this._crosswalk(marks, leg.cx, leg.cy, leg.ux, leg.uy, leg.w, white);
+          if (japan) this._tactile(tact, leg.cx, leg.cy, leg.ux, leg.uy, leg.w, yellow);
         }
       }
     }
@@ -2501,6 +2474,14 @@ export class CityRenderer {
       stand: [[[-0.22, 1.09, -0.01], [-0.24, 0.82, 0.03]], [[0.22, 1.09, -0.01], [0.24, 0.82, 0.03]]],
       walk: [[[-0.22, 1.09, -0.07], [-0.23, 0.83, -0.14]], [[0.22, 1.09, 0.07], [0.22, 0.85, 0.18]]],
       phone: [[[-0.22, 1.09, -0.01], [-0.24, 0.82, 0.03]], [[0.2, 1.1, 0.02], [0.09, 1.27, 0.2]]],
+      // conversation gestures: one hand up explaining, both palms open, hands on hips, arms crossed,
+      // pointing ahead, waving high
+      talk: [[[-0.22, 1.09, -0.01], [-0.24, 0.82, 0.03]], [[0.25, 1.1, 0.06], [0.22, 1.24, 0.3]]],
+      open: [[[-0.25, 1.1, 0.05], [-0.33, 1.08, 0.3]], [[0.25, 1.1, 0.05], [0.33, 1.08, 0.3]]],
+      hips: [[[-0.37, 1.1, -0.03], [-0.19, 0.93, 0.03]], [[0.37, 1.1, -0.03], [0.19, 0.93, 0.03]]],
+      crossed: [[[-0.24, 1.12, 0.13], [0.11, 1.2, 0.17]], [[0.24, 1.14, 0.13], [-0.11, 1.22, 0.15]]],
+      point: [[[-0.22, 1.09, -0.01], [-0.24, 0.82, 0.03]], [[0.24, 1.3, 0.22], [0.26, 1.36, 0.5]]],
+      wave: [[[-0.22, 1.09, -0.01], [-0.24, 0.82, 0.03]], [[0.36, 1.55, 0.04], [0.4, 1.82, 0.08]]],
     }[v.pose];
     arms.forEach(([elbow, hand], i) => {
       top.push(limb([i ? 0.2 : -0.2, 1.36, 0], elbow, 0.058, 0.05, W));
@@ -2618,86 +2599,248 @@ export class CityRenderer {
   }
 
   /**
-   * Deterministic instanced people on sidewalks and cars on roads. options.people and options.cars are
-   * each 'none' | 'few' | 'many'. Walkers face along the street (either way), standers anywhere; moving
-   * cars keep to the local traffic side, parked ones line the curb of smaller streets.
+   * Grid lookup (20 m cells) for crowd placement: building footprints (not ones raised over the street,
+   * like arcades), water and carriageways (road centrelines with their half widths).
+   */
+  _placementIndex(entries) {
+    const C = 20;
+    const city = this._city || {};
+    const lim = (city.size || 600) + 100; // clamp huge areas (sea, lakes) to the built square
+    const cells = new Map();
+    const add = (minx, miny, maxx, maxy, item) => {
+      const i0 = Math.floor(clamp(minx, -lim, lim) / C), i1 = Math.floor(clamp(maxx, -lim, lim) / C);
+      const j0 = Math.floor(clamp(miny, -lim, lim) / C), j1 = Math.floor(clamp(maxy, -lim, lim) / C);
+      for (let i = i0; i <= i1; i++) {
+        for (let j = j0; j <= j1; j++) {
+          const k = `${i},${j}`;
+          let l = cells.get(k);
+          if (!l) cells.set(k, (l = []));
+          l.push(item);
+        }
+      }
+    };
+    const addArea = (a, kind) => {
+      if (!a.outer || a.outer.length < 3) return;
+      let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+      for (const [x, y] of a.outer) {
+        minx = Math.min(minx, x); maxx = Math.max(maxx, x);
+        miny = Math.min(miny, y); maxy = Math.max(maxy, y);
+      }
+      add(minx, miny, maxx, maxy, { kind, ring: a.outer, holes: a.holes });
+    };
+    for (const b of city.buildings || []) if (!(b.minHeight > 2)) addArea(b, 'b');
+    for (const a of city.water || []) addArea(a, 'w');
+    for (const e of entries) {
+      if (e.foot) continue;
+      const hw = e.w / 2;
+      for (let i = 0; i < e.pts.length - 1; i++) {
+        const a = e.pts[i], b = e.pts[i + 1];
+        add(Math.min(a[0], b[0]) - hw, Math.min(a[1], b[1]) - hw, Math.max(a[0], b[0]) + hw, Math.max(a[1], b[1]) + hw, { kind: 'r', a, b, hw });
+      }
+    }
+    const at = (x, y) => cells.get(`${Math.floor(x / C)},${Math.floor(y / C)}`) || [];
+    const inArea = (it, x, y) => inRing(x, y, it.ring) && !(it.holes || []).some((h) => h && h.length > 2 && inRing(x, y, h));
+    return {
+      inBuilding: (x, y) => at(x, y).some((it) => it.kind === 'b' && inArea(it, x, y)),
+      inWater: (x, y) => at(x, y).some((it) => it.kind === 'w' && inArea(it, x, y)),
+      onRoad: (x, y, m = 0) => at(x, y).some((it) => it.kind === 'r' && distToSegment(x, y, it.a, it.b) < it.hw + m),
+    };
+  }
+
+  /**
+   * Deterministic instanced people and cars; options.people / options.cars: 'none' | 'few' | 'many'.
+   * - Every spot is checked against buildings, water and carriageways, so people stay on sidewalks,
+   *   footways and zebra crossings, and cars stay out of buildings and off each other.
+   * - Each junction gets a light phase: one road is red (people walk its zebra crossings, cars queue
+   *   behind the stop line), the others are green (cars drive through; at signals people wait at the curb).
+   * - Along the streets people walk (either way, sometimes in pairs), stand around, or talk in small
+   *   circles with hand gestures. Moving cars keep to the local traffic side, parked ones line the curb.
    */
   _buildCrowd(roads) {
     const density = (v) => (v === 'few' || v === 'many' ? v : null);
     const pMode = density(this.options.people);
     const cMode = density(this.options.cars);
     if (!pMode && !cMode) return;
+    const pMany = pMode === 'many';
+    const cMany = cMode === 'many';
     const c = this._city.center || { lat: 0, lon: 0 };
     const rp = rng(hashStr(`people:${c.lat}:${c.lon}`));
     const rc = rng(hashStr(`cars:${c.lat}:${c.lon}`));
     const hand = leftHandTraffic(c.lat, c.lon) ? -1 : 1;
-    const nVar = FIGURE_VARIANTS.length;
+    const pick = (list, u) => list[Math.floor(u * list.length)];
+    const yawOf = (hx, hy) => Math.atan2(hx, -hy); // heading (local east, north) -> rotation about +Y
+
+    const entries = [];
+    for (const rd of roads) {
+      if (!rd.points || rd.points.length < 2 || rd.tunnel) continue;
+      const kind = rd.kind || 'residential';
+      const foot = FOOT_KINDS.has(kind);
+      entries.push({ pts: rd.points, kind, foot, major: MAJOR_KINDS.has(kind), w: rd.width || (foot ? 2 : 6), lanes: rd.lanes || 0 });
+    }
+    const idx = this._placementIndex(entries);
+    const drivable = (e) => !e.foot && e.w >= 5 && !(e.lanes === 1 && e.w < 6);
 
     const people = [];
     const cars = [];
-    for (const rd of roads) {
-      const pts = rd.points;
-      if (!pts || pts.length < 2 || rd.tunnel) continue;
-      const kind = rd.kind || 'residential';
-      const foot = FOOT_KINDS.has(kind);
-      const w = rd.width || 6;
-      const path = resamplePolyline(pts, 2);
+    const addPerson = (x, y, yaw, v, onRoad = false) => {
+      if (!this._clearOf(x, y, 2.5) || idx.inBuilding(x, y) || idx.inWater(x, y)) return;
+      if (!onRoad && idx.onRoad(x, y, 0.3)) return;
+      const scale = rp() < 0.06 ? 0.62 + 0.1 * rp() : 0.93 + 0.13 * rp(); // a few children
+      people.push({ x, y, yaw, v, scale, cols: [rp(), rp(), rp()] });
+    };
+    const addCar = (x, y, yaw, type, col) => {
+      const big = type === 'bus';
+      if (cars.some((e) => Math.hypot(e.x - x, e.y - y) < (big || e.type === 'bus' ? 7.5 : 4.8))) return;
+      if (!this._clearOf(x, y, big ? 7 : 5)) return;
+      const half = big ? 5 : 2.1; // nose and tail must stay out of buildings too
+      const hx = Math.sin(yaw), hy = -Math.cos(yaw);
+      for (const k of [-1, 0, 1]) if (idx.inBuilding(x + hx * half * k, y + hy * half * k)) return;
+      cars.push({ x, y, yaw, type, col });
+    };
+    const carType = (e, u, allowBus) => {
+      const busOk = allowBus && e.w >= 8 && BUS_KINDS.has(e.kind);
+      return pickWeighted(CAR_TYPES, u, (t) => (t[0] === 'bus' && !busOk ? 0 : t[1]));
+    };
+    const carColour = (type, u) => (type === 'bus' ? BUS_COLORS[Math.floor(u * BUS_COLORS.length)] : pickWeighted(CAR_COLORS, u));
 
-      // pedestrians: both sidewalks (or the footway itself), sometimes walking in pairs
-      if (pMode) {
-        const many = pMode === 'many';
-        for (const s of samplePoly(path, many ? 5 : 16, rp() * 5)) {
-          if (rp() > (many ? 0.7 : 0.35)) continue;
-          const side = foot ? 0 : (rp() < 0.5 ? -1 : 1) * (w / 2 + 2.2);
-          const jit = (rp() - 0.5) * 1.2;
-          const dir = rp() < 0.5 ? 1 : -1;
-          const heading = Math.atan2(dir * s.tx, -dir * s.ty);
-          const pair = rp() < (many ? 0.25 : 0.12);
-          for (const o of pair ? [-0.33, 0.33] : [0]) {
-            const v = Math.floor(rp() * nVar);
-            const walking = FIGURE_VARIANTS[v].pose === 'walk';
-            // walkers follow the street, standers turn anywhere (a pair half-faces each other)
-            const yaw = walking ? heading + (rp() - 0.5) * 0.3 : pair ? heading + (o > 0 ? -1 : 1) * (0.6 + 0.6 * rp()) : rp() * Math.PI * 2;
-            const scale = rp() < 0.06 ? 0.62 + 0.1 * rp() : 0.93 + 0.13 * rp(); // a few children
-            const off = side + jit + o;
-            const x = s.x + s.nx * off;
-            const y = s.y + s.ny * off;
-            const cols = [rp(), rp(), rp()];
-            if (this._clearOf(x, y, 2.5)) people.push({ x, y, yaw, scale, v, cols });
+    // ----- junctions: light phase, zebra crossings, queues -----
+    const junctions = findJunctions(entries);
+    const byRoad = entries.map(() => []);
+    for (const j of junctions) {
+      const r = rng(hashStr(`phase:${j.x.toFixed(1)}:${j.y.toFixed(1)}`));
+      const ids = [...j.roads];
+      j.red = ids[Math.floor(r() * ids.length)]; // the road whose traffic is stopped
+      j.busy = r() < (pMany || cMany ? 0.8 : 0.4); // people crossing here right now
+      j.r = r;
+      for (const ei of ids) byRoad[ei].push(j);
+    }
+    for (const j of junctions) {
+      const r = j.r;
+      for (const leg of j.legs) {
+        const e = entries[leg.ei];
+        const px = -leg.uy, py = leg.ux; // across the road
+        if (leg.ei === j.red) {
+          // people on the zebra crossing, walking across either way
+          if (pMode && j.busy) {
+            const n = 1 + Math.floor(r() * (pMany ? 4 : 2));
+            for (let k = 0; k < n; k++) {
+              const s = (r() - 0.5) * Math.max(0, leg.w - 1);
+              const a = (r() - 0.5) * 2 * (CROSS_HALF - 0.4);
+              const dir = r() < 0.5 ? 1 : -1;
+              addPerson(leg.cx + px * s + leg.ux * a, leg.cy + py * s + leg.uy * a, yawOf(dir * px, dir * py) + (r() - 0.5) * 0.2, pick(WALK_VARIANTS, r()), true);
+            }
           }
-        }
-      }
-
-      // cars: carriageway only
-      if (cMode && !foot && w >= 5 && !(rd.lanes === 1 && w < 6)) {
-        const many = cMode === 'many';
-        const every = many ? 12 : 40;
-        const parkable = PARK_KINDS.has(kind);
-        const busOk = w >= 8 && BUS_KINDS.has(kind);
-        const weight = (e) => (e[0] === 'bus' && !busOk ? 0 : e[1]);
-        for (const s of samplePoly(path, every, rc() * every)) {
-          if (rc() > (many ? 0.6 : 0.3)) continue;
-          const parked = parkable && rc() < 0.4;
-          const sideSign = rc() < 0.5 ? -1 : 1;
-          const lateral = parked ? sideSign * (w / 2 - 1.1) : sideSign * (w / 4) + (rc() - 0.5) * 0.5;
-          // moving cars drive on the local traffic side; a few parked ones face against it
-          const dir = parked && rc() < 0.25 ? -sideSign * hand : sideSign * hand;
-          const yawJit = (rc() - 0.5) * (parked ? 0.1 : 0.04);
-          const n = parked && rc() < (many ? 0.5 : 0.2) ? 2 + Math.floor(rc() * 2) : 1; // a short row at the curb
-          let along = (rc() - 0.5) * every * 0.4;
-          for (let k = 0; k < n; k++, along += 5.2 + rc()) {
-            const type = pickWeighted(CAR_TYPES, rc(), parked ? (e) => (e[0] === 'bus' ? 0 : e[1]) : weight);
-            const col = type === 'bus' ? BUS_COLORS[Math.floor(rc() * BUS_COLORS.length)] : pickWeighted(CAR_COLORS, rc());
-            const x = s.x + s.tx * along + s.nx * lateral;
-            const y = s.y + s.ty * along + s.ny * lateral;
-            const yaw = Math.atan2(dir * s.tx, -dir * s.ty) + yawJit + (k ? (rc() - 0.5) * 0.06 : 0);
-            const gap = type === 'bus' ? 7.5 : 4.8; // keep cars from overlapping each other
-            if (cars.some((e) => Math.hypot(e.x - x, e.y - y) < (e.type === 'bus' ? 7.5 : gap))) continue;
-            if (this._clearOf(x, y, type === 'bus' ? 7 : 5)) cars.push({ x, y, yaw, type, col });
+          // cars waiting behind the stop line, in the lane heading into the junction
+          if (cMode && drivable(e) && (j.signal || j.busy)) {
+            const lat = (hand * leg.w) / 4;
+            const n = 1 + Math.floor(r() * (cMany ? 4 : 2));
+            let d = CROSS_AT + CROSS_HALF + 1.5 + 2.3;
+            for (let k = 0; k < n; k++, d += 5.4 + 0.8 * r()) {
+              if (!pointAlong(leg.path, d + 2.3)) break;
+              const s = pointAlong(leg.path, d);
+              const hx = -s.tx, hy = -s.ty; // facing the junction
+              const type = carType(e, r(), k > 0);
+              addCar(s.x + hy * lat, s.y - hx * lat, yawOf(hx, hy) + (r() - 0.5) * 0.03, type, carColour(type, r()));
+            }
+          }
+        } else if (pMode && j.signal) {
+          // green road: people wait at the curb at both ends of its crossing, facing across
+          for (const side of [-1, 1]) {
+            if (r() > (pMany ? 0.7 : 0.35)) continue;
+            const n = 1 + Math.floor(r() * (pMany ? 3 : 2));
+            for (let k = 0; k < n; k++) {
+              const s = side * (leg.w / 2 + 0.7 + 0.6 * r());
+              const a = (r() - 0.5) * 2.4;
+              const v = r() < 0.2 ? pick(TALK_VARIANTS, r()) : pick(IDLE_VARIANTS, r());
+              addPerson(leg.cx + px * s + leg.ux * a, leg.cy + py * s + leg.uy * a, yawOf(-side * px, -side * py) + (r() - 0.5) * 0.5, v);
+            }
           }
         }
       }
     }
+    // distances from (x, y) to the junctions on road ei: any junction, red ones, and red ones the car
+    // heads into (heading (hx, hy)). Cars that turned out of the green road may still drive away.
+    const nearJunction = (ei, x, y, hx, hy) => {
+      let red = Infinity, redIn = Infinity, any = Infinity;
+      for (const j of byRoad[ei]) {
+        const d = Math.hypot(x - j.x, y - j.y);
+        any = Math.min(any, d);
+        if (j.red !== ei) continue;
+        red = Math.min(red, d);
+        if ((j.x - x) * hx + (j.y - y) * hy > 0) redIn = Math.min(redIn, d);
+      }
+      return { red, redIn, any };
+    };
+
+    entries.forEach((e, ei) => {
+      const path = resamplePolyline(e.pts, 2);
+
+      // ----- people along the street: walkers, people standing around, talking groups -----
+      if (pMode) {
+        for (const s of samplePoly(path, pMany ? 5 : 16, rp() * 5)) {
+          if (rp() > (pMany ? 0.7 : 0.35)) continue;
+          const side = rp() < 0.5 ? -1 : 1;
+          const roll = rp();
+          if (roll < (pMany ? 0.12 : 0.08)) {
+            // a circle of 2-4 people facing each other, most of them gesturing
+            const off = e.foot ? 0 : side * (e.w / 2 + 1.3);
+            const cx = s.x + s.nx * off, cy = s.y + s.ny * off;
+            const n = 2 + Math.floor(rp() * 3);
+            const R = 0.45 + 0.12 * n;
+            const a0 = rp() * Math.PI * 2;
+            for (let k = 0; k < n; k++) {
+              const a = a0 + (k * Math.PI * 2) / n + (rp() - 0.5) * 0.4;
+              const x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
+              const v = k === 0 || rp() < 0.7 ? pick(TALK_VARIANTS, rp()) : pick(IDLE_VARIANTS, rp());
+              addPerson(x, y, yawOf(cx - x, cy - y) + (rp() - 0.5) * 0.5, v);
+            }
+            continue;
+          }
+          // sidewalk band: 0.5-2.1 m from the curb (sidewalks are 2.5 m wide); footways: on the path
+          const off = e.foot ? (rp() - 0.5) * Math.max(0, e.w - 0.8) : side * (e.w / 2 + 0.6 + 1.5 * rp());
+          if (roll < 0.25) {
+            // standing alone: waiting, on the phone, or calling out to someone
+            const v = rp() < 0.25 ? pick(TALK_VARIANTS, rp()) : pick(IDLE_VARIANTS, rp());
+            addPerson(s.x + s.nx * off, s.y + s.ny * off, rp() * Math.PI * 2, v);
+            continue;
+          }
+          // walking along the street, sometimes side by side
+          const dir = rp() < 0.5 ? 1 : -1;
+          const heading = yawOf(dir * s.tx, dir * s.ty);
+          const pair = rp() < (pMany ? 0.25 : 0.12);
+          for (const o of pair ? [-0.33, 0.33] : [0]) {
+            addPerson(s.x + s.nx * (off + o), s.y + s.ny * (off + o), heading + (rp() - 0.5) * 0.3, pick(WALK_VARIANTS, rp()));
+          }
+        }
+      }
+
+      // ----- cars along the carriageway: moving in lane, or parked at the curb -----
+      if (cMode && drivable(e)) {
+        const every = cMany ? 9 : 30;
+        const parkable = PARK_KINDS.has(e.kind);
+        for (const s of samplePoly(path, every, rc() * every)) {
+          if (rc() > (cMany ? 0.75 : 0.4)) continue;
+          const parked = parkable && rc() < 0.4;
+          const sideSign = rc() < 0.5 ? -1 : 1;
+          const lateral = parked ? sideSign * (e.w / 2 - 1.1) : sideSign * (e.w / 4) + (rc() - 0.5) * 0.5;
+          // moving cars drive on the local traffic side; a few parked ones face against it
+          const dir = parked && rc() < 0.25 ? -sideSign * hand : sideSign * hand;
+          const yawJit = (rc() - 0.5) * (parked ? 0.1 : 0.04);
+          const n = parked && rc() < (cMany ? 0.5 : 0.2) ? 2 + Math.floor(rc() * 2) : 1; // a short row at the curb
+          let along = (rc() - 0.5) * every * 0.4;
+          for (let k = 0; k < n; k++, along += 5.2 + rc()) {
+            const type = carType(e, rc(), !parked);
+            const col = carColour(type, rc());
+            const x = s.x + s.tx * along + s.nx * lateral;
+            const y = s.y + s.ty * along + s.ny * lateral;
+            // no parking near junctions; the red road's approach is left to the queue built above
+            const nj = nearJunction(ei, x, y, dir * s.tx, dir * s.ty);
+            if (parked ? nj.any < 15 : nj.red < CROSS_AT + CROSS_HALF + 3 || nj.redIn < 36) continue;
+            addCar(x, y, yawOf(dir * s.tx, dir * s.ty) + yawJit + (k ? (rc() - 0.5) * 0.06 : 0), type, col);
+          }
+        }
+      }
+    });
 
     const m4 = new THREE.Matrix4();
     const p = new THREE.Vector3();
@@ -3716,7 +3859,19 @@ const FIGURE_VARIANTS = [
   { pose: 'stand', bottom: 'pants', hair: 'short', coat: true },
   { pose: 'walk', bottom: 'pants', hair: 'short', bag: true },
   { pose: 'phone', bottom: 'pants', hair: 'bun' },
+  // conversation poses (talking groups; also mixed in among people standing around)
+  { pose: 'talk', bottom: 'pants', hair: 'short', talk: true },
+  { pose: 'open', bottom: 'skirt', hair: 'long', talk: true },
+  { pose: 'hips', bottom: 'pants', hair: 'bun', coat: true, talk: true },
+  { pose: 'crossed', bottom: 'pants', hair: 'short', talk: true },
+  { pose: 'point', bottom: 'skirt', hair: 'bun', bag: true, talk: true },
+  { pose: 'talk', bottom: 'skirt', hair: 'long', coat: true, talk: true },
+  { pose: 'wave', bottom: 'pants', hair: 'short', bag: true, talk: true },
 ];
+// variant indices by role
+const WALK_VARIANTS = FIGURE_VARIANTS.flatMap((v, i) => (v.pose === 'walk' ? [i] : []));
+const IDLE_VARIANTS = FIGURE_VARIANTS.flatMap((v, i) => (v.pose === 'stand' || v.pose === 'phone' ? [i] : []));
+const TALK_VARIANTS = FIGURE_VARIANTS.flatMap((v, i) => (v.talk ? [i] : []));
 // [colour, weight] palettes for pickWeighted
 const SHIRT_COLORS = [['#f4f4f2', 5], ['#2b2f3a', 3], ['#5d7896', 2], ['#c9b48f', 2], ['#9a3b35', 1], ['#6f8a5a', 1], ['#d9a441', 1], ['#8c8f96', 2]];
 const COAT_COLORS = [['#2a2c33', 4], ['#a68a64', 3], ['#56606e', 2], ['#7a3b34', 1], ['#d8d2c4', 1]];
@@ -3733,6 +3888,85 @@ const CAR_COLORS = [
 const BUS_COLORS = ['#f2f2f4', '#3a6ea5', '#2f8a5c', '#e5b93a'];
 const PARK_KINDS = new Set(['residential', 'unclassified', 'living_street', 'service', 'tertiary']);
 const BUS_KINDS = new Set(['primary', 'secondary', 'trunk', 'tertiary', 'primary_link', 'secondary_link']);
+
+// Zebra crossings sit CROSS_AT m out along each junction leg and are 2 * CROSS_HALF m wide (see _crosswalk).
+const CROSS_AT = 7;
+const CROSS_HALF = 1.6;
+
+/**
+ * Junctions of drawn roads: vertices shared by two or more non-foot roads (matched to 0.5 m).
+ * entries: [{ pts, foot, major, w }]. Each leg (a road leaving the junction with at least 10 m to its
+ * next vertex) carries a zebra crossing centred at (cx, cy); (ux, uy) points away from the junction and
+ * path is the road's polyline from the junction outward (for queues that follow bends).
+ * Returns [{ x, y, roads: Set of entry indices, signal, legs: [{ ei, ux, uy, w, len, px, py, cx, cy, path }] }].
+ */
+function findJunctions(entries) {
+  const junc = new Map();
+  entries.forEach((e, ei) => {
+    if (e.foot) return;
+    e.pts.forEach((p, vi) => {
+      const key = `${Math.round(p[0] * 2)},${Math.round(p[1] * 2)}`;
+      let j = junc.get(key);
+      if (!j) {
+        j = { x: p[0], y: p[1], refs: [] };
+        junc.set(key, j);
+      }
+      j.refs.push({ ei, vi });
+    });
+  });
+  const out = [];
+  for (const j of junc.values()) {
+    const roads = new Set(j.refs.map((rf) => rf.ei));
+    if (roads.size < 2) continue;
+    const legs = [];
+    for (const rf of j.refs) {
+      const e = entries[rf.ei];
+      const p = e.pts[rf.vi];
+      for (const step of [-1, 1]) {
+        const nb = e.pts[rf.vi + step];
+        if (!nb) continue;
+        const dx = nb[0] - p[0];
+        const dy = nb[1] - p[1];
+        const L = Math.hypot(dx, dy);
+        if (L < 10) continue; // too short for a crossing on this leg
+        const ux = dx / L;
+        const uy = dy / L;
+        const path = step > 0 ? e.pts.slice(rf.vi) : e.pts.slice(0, rf.vi + 1).reverse();
+        legs.push({ ei: rf.ei, ux, uy, w: e.w, len: L, px: p[0], py: p[1], cx: p[0] + ux * CROSS_AT, cy: p[1] + uy * CROSS_AT, path });
+      }
+    }
+    out.push({ x: j.x, y: j.y, roads, signal: [...roads].some((ei) => entries[ei].major), legs });
+  }
+  return out;
+}
+
+/** Point d metres along a polyline with the unit tangent there: { x, y, tx, ty }, or null past its end. */
+function pointAlong(pts, d) {
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (L < 1e-9) continue;
+    if (d <= L) {
+      const tx = (b[0] - a[0]) / L;
+      const ty = (b[1] - a[1]) / L;
+      return { x: a[0] + tx * d, y: a[1] + ty * d, tx, ty };
+    }
+    d -= L;
+  }
+  return null;
+}
+
+/** Even-odd point-in-polygon test for a ring of [x, y] points. */
+function inRing(x, y, ring) {
+  let inside = false;
+  for (let i = 0, k = ring.length - 1; i < ring.length; k = i++) {
+    const a = ring[i];
+    const b = ring[k];
+    if (a[1] > y !== b[1] > y && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
+  }
+  return inside;
+}
 
 /** Weighted pick from [[value, weight], ...] with u in [0, 1); weightOf may override the weights. */
 function pickWeighted(list, u, weightOf = (e) => e[1]) {

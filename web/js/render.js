@@ -1282,7 +1282,10 @@ export class CityRenderer {
       season: 'summer',
       treeStyle: 'tone',
       leafEdge: 'smooth',
-      crowd: 'none',
+      treeType: 'mixed',
+      treeSize: 'normal',
+      people: 'none',
+      cars: 'none',
       straightVerticals: false,
       twoSidedShadows: false,
     };
@@ -2193,7 +2196,62 @@ export class CityRenderer {
     return mergeGeometries(parts, false);
   }
 
-  /** Trees as two InstancedMeshes (trunk + crown or winter branches). */
+  /** Conifer crown: four stacked cone tiers, base at y = 0, top at y = 1, unit radius. lowPoly = one cone. */
+  _coniferGeometry(lowPoly) {
+    if (lowPoly) {
+      const g = new THREE.ConeGeometry(1, 1, 6);
+      g.translate(0, 0.5, 0);
+      return toBatchable(g, [1, 1, 1]);
+    }
+    const parts = [];
+    for (let k = 0; k < 4; k++) {
+      const g = new THREE.ConeGeometry(1 - k * 0.22, 0.4, 9);
+      g.rotateY(k * 0.7);
+      g.translate(0, k * 0.2 + 0.2, 0);
+      parts.push(toBatchable(g, [1, 1, 1]));
+    }
+    return mergeGeometries(parts, false);
+  }
+
+  /** Palm crown: eight arching fronds (thin diamond-section strips) from the trunk top at the origin, unit length. */
+  _palmGeometry() {
+    const seg = 6;
+    const pos = [];
+    for (let f = 0; f < 8; f++) {
+      const th = (f / 8) * Math.PI * 2 + (f % 2) * 0.25;
+      const ux = Math.cos(th), uz = Math.sin(th); // outward
+      const sx = -uz, sz = ux; // sideways
+      const lift = 0.5 + 0.25 * ((f * 5) % 3) / 2;
+      const ring = [];
+      for (let i = 0; i <= seg; i++) {
+        const t = i / seg;
+        const cx = ux * t, cz = uz * t, cy = lift * t - 0.95 * t * t;
+        const w = 0.2 * Math.sin(Math.PI * Math.min(1, t * 1.1)) + 0.01;
+        const h = 0.03;
+        ring.push([
+          [cx - sx * w, cy - 0.04 * t, cz - sz * w],
+          [cx, cy + h, cz],
+          [cx + sx * w, cy - 0.04 * t, cz + sz * w],
+          [cx, cy - h, cz],
+        ]);
+      }
+      for (let i = 0; i < seg; i++) {
+        for (let k = 0; k < 4; k++) {
+          const a = ring[i][k], b = ring[i][(k + 1) % 4], c = ring[i + 1][(k + 1) % 4], d = ring[i + 1][k];
+          pos.push(...a, ...c, ...b, ...a, ...d, ...c);
+        }
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    return toBatchable(g, [1, 1, 1]);
+  }
+
+  /**
+   * Trees as instanced meshes: one trunk mesh plus a crown mesh per shape (round, conifer, palm).
+   * options.treeType picks the species mix, options.treeSize scales them. Round crowns (broadleaf and
+   * columnar) use the detail distance LOD; in winter they become bare branches, conifers and palms stay green.
+   */
   _buildTrees(trees) {
     const opt = this.options;
     const season = Object.prototype.hasOwnProperty.call(SEASON_CROWN, opt.season) ? opt.season : 'summer';
@@ -2206,6 +2264,14 @@ export class CityRenderer {
     const n = pts.length;
     if (!n) return;
 
+    const mix = TREE_MIX[opt.treeType] || TREE_MIX.mixed;
+    const [k0, k1] = TREE_SIZE[opt.treeSize] || TREE_SIZE.normal;
+    const pick = (u) => {
+      let acc = 0;
+      for (const [kind, w] of mix) if (u < (acc += w)) return kind;
+      return mix[mix.length - 1][0];
+    };
+
     const trunkGeo = (() => {
       const g = new THREE.CylinderGeometry(0.16, 0.22, 1, 6);
       g.translate(0, 0.5, 0); // base at 0, unit height
@@ -2214,14 +2280,6 @@ export class CityRenderer {
     const trunk = new THREE.InstancedMesh(trunkGeo, this._materialFor('tree-trunk'), n);
     this._registerMesh(trunk, 'tree-trunk', 'trees', trunkLayer);
 
-    let crown = null;
-    if (palette) {
-      crown = new THREE.InstancedMesh(this._crownGeometry(opt.leafEdge, opt.lowPoly), this._materialFor('tree-crown'), n);
-    } else {
-      crown = new THREE.InstancedMesh(this._branchGeometry(), this._materialFor('tree-crown'), n);
-    }
-    this._registerMesh(crown, 'tree-crown', 'trees', crownLayer);
-
     const m4 = new THREE.Matrix4();
     const qI = new THREE.Quaternion();
     const q = new THREE.Quaternion();
@@ -2229,58 +2287,116 @@ export class CityRenderer {
     const p = new THREE.Vector3();
     const up = new THREE.Vector3(0, 1, 0);
     const col = new THREE.Color();
+    // per crown shape: instance matrices, colours and positions
+    const sets = { round: [], conifer: [], palm: [] };
+    const add = (kind, pt, colour) => sets[kind].push({ m: m4.clone(), c: colour, pt });
+
     for (let i = 0; i < n; i++) {
       const x = pts[i][0];
       const y = pts[i][1];
       const r = rng(hashStr(`tree:${i}`));
+      // neighbours tend to share a species (street rows, groves): 70% follow a 40 m cell, 30% pick freely
+      const cellU = rng(hashStr(`treecell:${Math.floor(x / 40)}:${Math.floor(y / 40)}`))();
+      const kind = pick(r() < 0.7 ? cellU : r());
+      const k = k0 + (k1 - k0) * r();
       const g = this.groundHeight(x, y);
-      const trunkH = 4 + 2 * r(); // 4-6 m trunk
-      const cr = 2.6 + 1.2 * r(); // crown radius 2.6-3.8 m, so 5-8 m across
+      q.setFromAxisAngle(up, r() * Math.PI * 2);
+      const pt = [x, -y];
+
+      if (kind === 'conifer') {
+        const trunkH = (1.2 + 0.8 * r()) * k;
+        const h = (7 + 4 * r()) * k;
+        const rad = (1.9 + 0.8 * r()) * k;
+        p.set(x, g, -y);
+        s.set(1.2 * k, trunkH + h * 0.4, 1.2 * k);
+        m4.compose(p, qI, s);
+        trunk.setMatrixAt(i, m4);
+        p.set(x, g + trunkH, -y);
+        s.set(rad, h, rad);
+        m4.compose(p, q, s);
+        add('conifer', pt, CONIFER_CROWN[Math.floor(r() * CONIFER_CROWN.length)]);
+        continue;
+      }
+      if (kind === 'palm') {
+        const trunkH = (6 + 4 * r()) * k;
+        const rad = (2.6 + 0.9 * r()) * k;
+        p.set(x, g, -y);
+        s.set(0.8 * k, trunkH, 0.8 * k);
+        m4.compose(p, qI, s);
+        trunk.setMatrixAt(i, m4);
+        p.set(x, g + trunkH, -y);
+        s.set(rad, rad, rad);
+        m4.compose(p, q, s);
+        add('palm', pt, PALM_CROWN[Math.floor(r() * PALM_CROWN.length)]);
+        continue;
+      }
+
+      // round crowns: broadleaf (wide) or columnar (poplar / cypress: narrow and tall)
+      const columnar = kind === 'columnar';
+      const trunkH = (columnar ? 1.2 + 0.8 * r() : 4 + 2 * r()) * k; // 4-6 m trunk for broadleaf
+      const cr = (columnar ? 1.3 + 0.5 * r() : 2.6 + 1.2 * r()) * k; // broadleaf crown 5-8 m across
+      const ch = columnar ? (4 + 1.5 * r()) * k : cr * 0.85; // crown vertical scale
       const wx = cr * (0.9 + 0.2 * r()); // per-tree width jitter (shared crown geometry)
       const wz = cr * (0.9 + 0.2 * r());
-      q.setFromAxisAngle(up, r() * Math.PI * 2);
 
       // trunk: unit cylinder stretched to trunkH
       p.set(x, g, -y);
-      s.set(1, trunkH, 1);
+      s.set(k, columnar ? trunkH + ch : trunkH, k);
       m4.compose(p, qI, s);
       trunk.setMatrixAt(i, m4);
 
       if (palette) {
         if (opt.lowPoly) {
           p.set(x, g + trunkH * 0.8, -y);
-          s.set(cr, cr * 1.5, cr);
+          s.set(cr, columnar ? ch * 1.4 : cr * 1.5, cr);
         } else {
-          p.set(x, g + trunkH + cr * 0.25, -y);
-          s.set(wx, cr * 0.85, wz);
+          p.set(x, g + trunkH + (columnar ? ch * 0.8 : cr * 0.25), -y);
+          s.set(wx, ch, wz);
         }
         m4.compose(p, q, s);
-        crown.setMatrixAt(i, m4);
-        col.set(palette[Math.floor(r() * palette.length)]);
-        crown.setColorAt(i, col);
+        add('round', pt, palette[Math.floor(r() * palette.length)]);
       } else {
         // winter: bare branches at the top of the trunk
         p.set(x, g + trunkH * 0.85, -y);
-        s.set(cr * 0.9, cr * 0.9, cr * 0.9);
+        if (columnar) s.set(cr * 0.7, ch * 0.8, cr * 0.7);
+        else s.set(cr * 0.9, cr * 0.9, cr * 0.9);
         m4.compose(p, q, s);
-        crown.setMatrixAt(i, m4);
-        col.set('#5c5550');
-        crown.setColorAt(i, col);
+        add('round', pt, '#5c5550');
       }
     }
     trunk.instanceMatrix.needsUpdate = true;
-    crown.instanceMatrix.needsUpdate = true;
-    if (crown.instanceColor) crown.instanceColor.needsUpdate = true;
     trunk.computeBoundingSphere();
-    crown.computeBoundingSphere();
 
-    // Tree picture distance: beyond it, crowns switch to a cheap low-detail stand-in (0 = off).
+    const geos = {
+      round: () => (palette ? this._crownGeometry(opt.leafEdge, opt.lowPoly) : this._branchGeometry()),
+      conifer: () => this._coniferGeometry(opt.lowPoly),
+      palm: () => this._palmGeometry(),
+    };
+    const meshes = {};
+    for (const kind of Object.keys(sets)) {
+      const list = sets[kind];
+      if (!list.length) continue;
+      const im = new THREE.InstancedMesh(geos[kind](), this._materialFor('tree-crown'), list.length);
+      list.forEach((e, j) => {
+        im.setMatrixAt(j, e.m);
+        im.setColorAt(j, col.set(e.c));
+      });
+      im.instanceMatrix.needsUpdate = true;
+      if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      im.computeBoundingSphere();
+      this._registerMesh(im, 'tree-crown', 'trees', crownLayer, { name: kind === 'round' ? 'tree-crown' : `tree-crown-${kind}` });
+      meshes[kind] = im;
+    }
+
+    // Tree picture distance: beyond it, round crowns switch to a cheap low-detail stand-in (0 = off).
     this._treeLOD = null;
-    if (palette && !opt.lowPoly) {
+    const crown = meshes.round;
+    if (crown && palette && !opt.lowPoly) {
+      const m = crown.count;
       const farGeo = toBatchable(new THREE.IcosahedronGeometry(1, 1), colArr('#ffffff'));
-      const far = new THREE.InstancedMesh(farGeo, this._materialFor('tree-crown'), n);
+      const far = new THREE.InstancedMesh(farGeo, this._materialFor('tree-crown'), m);
       this._registerMesh(far, 'tree-crown', 'trees', crownLayer, { name: 'tree-crown-far' });
-      for (let i = 0; i < n; i++) {
+      for (let i = 0; i < m; i++) {
         crown.getColorAt(i, col);
         far.setColorAt(i, col);
       }
@@ -2288,7 +2404,7 @@ export class CityRenderer {
       this._treeLOD = {
         crown, far,
         mats: Float32Array.from(crown.instanceMatrix.array),
-        pts: pts.map((t) => [t[0], -t[1]]),
+        pts: sets.round.map((e) => e.pt),
         last: null, lastDist: -1,
       };
       this._updateTreeLOD(true);
@@ -2334,45 +2450,188 @@ export class CityRenderer {
   // ----- people and cars --------------------------------------------------------
 
   /**
-   * Simple human figure, feet at y = 0, about 1.7 m tall: legs, torso, arms (body, takes the clothing
-   * colour from the instance colour) and a head sphere of radius 0.11 m at 1.6 m (skin vertex colour).
+   * Manga "mob" figures: rounded tapered limbs, a smooth torso and a hair silhouette, no face, feet at
+   * y = 0, about 1.7 m tall, facing local +Z. One set of four merged parts per variant (FIGURE_VARIANTS):
+   * top (shirt or coat, instance colour), bottom (trousers or skirt, instance colour), hair (instance
+   * colour) and fixed (skin, shoes, bags: vertex colours only).
    */
-  _figureGeometries() {
-    const white = [1, 1, 1];
-    const legs = [-0.09, 0.09].map((x) => {
-      const g = new THREE.BoxGeometry(0.12, 0.86, 0.13);
-      g.translate(x, 0.43, 0);
-      return toBatchable(g, colArr('#4f5560'));
+  _figureGeometries(v) {
+    const W = [1, 1, 1];
+    const SKIN = colArr('#e8bf9c');
+    const DARK = colArr('#2a2a2e');
+    const top = [], bottom = [], hair = [], fixed = [];
+    const skirt = v.bottom === 'skirt';
+
+    // legs: hips at y 0.88, feet stepping forward / back when walking
+    const feet = v.pose === 'walk' ? [[-0.085, 0.07, 0.24], [0.085, 0.08, -0.2]] : [[-0.09, 0.07, 0.01], [0.09, 0.07, -0.01]];
+    feet.forEach((f, i) => {
+      const hip = [i ? 0.08 : -0.08, 0.88, 0];
+      if (skirt) {
+        // skirt to the knee, bare legs below
+        const t = (0.88 - 0.55) / (0.88 - f[1]);
+        fixed.push(limb([hip[0] + (f[0] - hip[0]) * t, 0.55, hip[2] + (f[2] - hip[2]) * t], f, 0.05, 0.04, SKIN));
+      } else {
+        bottom.push(limb(hip, f, 0.075, 0.048, W));
+      }
+      fixed.push(limb([f[0], 0.045, f[2] - 0.03], [f[0], 0.04, f[2] + 0.12], 0.048, 0.045, DARK)); // shoe
     });
-    const torso = new THREE.BoxGeometry(0.36, 0.6, 0.2);
-    torso.translate(0, 1.15, 0);
-    const arms = [-0.24, 0.24].map((x) => {
-      const g = new THREE.BoxGeometry(0.1, 0.62, 0.11);
-      g.translate(x, 1.13, 0);
-      return toBatchable(g, white);
+    {
+      const g = skirt ? new THREE.CylinderGeometry(0.14, 0.25, 0.42, 14) : new THREE.SphereGeometry(0.15, 12, 8);
+      if (skirt) g.scale(1, 1, 0.8);
+      else g.scale(1, 0.6, 0.72);
+      g.translate(0, skirt ? 0.72 : 0.9, 0);
+      bottom.push(toBatchable(g, W));
+    }
+
+    // torso (a coat runs down over the thighs) and rounded shoulders
+    {
+      const g = v.coat ? new THREE.CylinderGeometry(0.17, 0.22, 0.95, 14) : new THREE.CylinderGeometry(0.17, 0.135, 0.54, 14);
+      g.scale(1, 1, 0.62);
+      g.translate(0, v.coat ? 0.94 : 1.13, 0);
+      top.push(toBatchable(g, W));
+      for (const x of [-0.165, 0.165]) {
+        const sh = new THREE.SphereGeometry(0.068, 10, 8);
+        sh.translate(x, 1.36, 0);
+        top.push(toBatchable(sh, W));
+      }
+    }
+
+    // arms: upper arm + forearm (sleeves) and a hand; they swing against the legs when walking
+    const arms = {
+      stand: [[[-0.22, 1.09, -0.01], [-0.24, 0.82, 0.03]], [[0.22, 1.09, -0.01], [0.24, 0.82, 0.03]]],
+      walk: [[[-0.22, 1.09, -0.07], [-0.23, 0.83, -0.14]], [[0.22, 1.09, 0.07], [0.22, 0.85, 0.18]]],
+      phone: [[[-0.22, 1.09, -0.01], [-0.24, 0.82, 0.03]], [[0.2, 1.1, 0.02], [0.09, 1.27, 0.2]]],
+    }[v.pose];
+    arms.forEach(([elbow, hand], i) => {
+      top.push(limb([i ? 0.2 : -0.2, 1.36, 0], elbow, 0.058, 0.05, W));
+      top.push(limb(elbow, hand, 0.047, 0.04, W));
+      const h = new THREE.SphereGeometry(0.043, 8, 6);
+      h.translate(...hand);
+      fixed.push(toBatchable(h, SKIN));
     });
-    const body = mergeGeometries([...legs, toBatchable(torso, white), ...arms], false);
-    const headG = new THREE.SphereGeometry(0.11, 8, 6);
-    headG.translate(0, 1.6, 0);
-    return { body, head: toBatchable(headG, colArr('#e2b48f')) };
+    if (v.pose === 'phone') {
+      const g = new THREE.BoxGeometry(0.07, 0.13, 0.02);
+      g.rotateX(-0.5);
+      g.translate(0.09, 1.32, 0.22);
+      fixed.push(toBatchable(g, DARK));
+    }
+
+    // neck, head (slightly oval) and hair: a cap over the back of the head, plus long hair or a bun
+    fixed.push(limb([0, 1.38, 0], [0, 1.49, 0.005], 0.048, 0.045, SKIN));
+    {
+      const g = new THREE.SphereGeometry(0.1, 14, 10);
+      g.scale(0.92, 1.12, 1);
+      g.translate(0, 1.585, 0.01);
+      fixed.push(toBatchable(g, SKIN));
+      const cap = new THREE.SphereGeometry(0.109, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.56);
+      cap.scale(0.94, 1.12, 1.02);
+      cap.rotateX(-0.42); // leaves the face open
+      cap.translate(0, 1.6, 0);
+      hair.push(toBatchable(cap, W));
+      if (v.hair === 'long') {
+        const g2 = new THREE.CylinderGeometry(0.1, 0.125, 0.34, 12);
+        g2.scale(1, 1, 0.5);
+        g2.translate(0, 1.44, -0.055);
+        hair.push(toBatchable(g2, W));
+      } else if (v.hair === 'bun') {
+        const g2 = new THREE.SphereGeometry(0.052, 10, 8);
+        g2.translate(0, 1.69, -0.08);
+        hair.push(toBatchable(g2, W));
+      }
+    }
+
+    if (v.bag) {
+      const BAG = colArr('#4a3b30');
+      const g = new THREE.BoxGeometry(0.08, 0.24, 0.3);
+      g.translate(0.27, 0.95, 0);
+      fixed.push(toBatchable(g, BAG));
+      fixed.push(limb([0.16, 1.4, 0], [0.27, 1.06, 0], 0.014, 0.014, BAG));
+    }
+    const merge = (list) => mergeGeometries(list, false);
+    return { top: merge(top), bottom: merge(bottom), hair: merge(hair), fixed: merge(fixed) };
   }
 
-  /** Car: body 4.4 x 1.8 x 0.8 m (0.2 m ground clearance) and a cabin 2.4 x 1.6 x 0.6 m set back. Local +Z = heading. */
-  _carGeometry() {
-    const body = new THREE.BoxGeometry(1.8, 0.8, 4.4);
-    body.translate(0, 0.6, 0);
-    const cabin = new THREE.BoxGeometry(1.6, 0.6, 2.4);
-    cabin.translate(0, 1.3, -0.35);
-    return mergeGeometries([toBatchable(body, [1, 1, 1]), toBatchable(cabin, colArr('#7d848d'))], false);
+  /** Car body for one CAR_TYPES entry: tapered body, cabin with a darker glass tint, four wheels. Local +Z = heading. */
+  _carGeometry(type) {
+    const W = [1, 1, 1];
+    const GLASS = colArr('#6a737d');
+    const parts = [];
+    // box(w, h, d, centre y, centre z, colour, top width, top depth, top shift in z)
+    const box = (w, h, d, y, z, col, topW = w, topD = d, shift = 0) => {
+      const g = taperBox(w, h, d, topW, topD, shift, col);
+      g.translate(0, y, z);
+      parts.push(g);
+      return g;
+    };
+    let wheel = [0.32, 2.6, 1.5]; // radius, wheelbase, track
+    switch (type) {
+      case 'compact':
+        box(1.68, 0.6, 3.8, 0.58, 0, W, 1.62, 3.6);
+        box(1.56, 0.56, 2.4, 1.16, -0.3, GLASS, 1.32, 1.8, -0.15);
+        wheel = [0.3, 2.4, 1.42];
+        break;
+      case 'kei':
+        box(1.47, 0.55, 3.4, 0.56, 0, W, 1.44, 3.3);
+        box(1.45, 0.92, 2.7, 1.29, -0.3, GLASS, 1.34, 2.35, -0.12);
+        wheel = [0.28, 2.3, 1.28];
+        break;
+      case 'suv':
+        box(1.86, 0.74, 4.7, 0.72, 0, W, 1.8, 4.5);
+        box(1.74, 0.62, 2.9, 1.4, -0.3, GLASS, 1.56, 2.4, -0.1);
+        wheel = [0.38, 2.8, 1.6];
+        break;
+      case 'van':
+        box(1.9, 1.75, 3.8, 1.2, -0.55, W, 1.86, 3.76);
+        box(1.88, 0.6, 1.1, 0.62, 1.9, W, 1.8, 0.8, -0.1);
+        box(1.86, 0.62, 0.4, 1.38, 1.4, GLASS, 1.8, 0.2, -0.1);
+        wheel = [0.34, 3.1, 1.62];
+        break;
+      case 'pickup':
+        box(1.5, 1.1, 1.5, 0.95, 1.0, W, 1.42, 1.2, -0.1);
+        box(1.5, 0.5, 0.6, 0.62, 1.95, W, 1.46, 0.5);
+        box(1.48, 0.38, 0.9, 1.25, 0.95, GLASS, 1.4, 0.7, -0.1);
+        box(1.5, 0.14, 2.0, 0.62, -0.78, W);
+        box(0.06, 0.32, 2.0, 0.85, -0.78, W).translate(0.72, 0, 0);
+        box(0.06, 0.32, 2.0, 0.85, -0.78, W).translate(-0.72, 0, 0);
+        box(1.5, 0.32, 0.06, 0.85, -1.75, W);
+        wheel = [0.3, 2.4, 1.3];
+        break;
+      case 'bus':
+        box(2.5, 2.6, 10.5, 1.7, 0, W, 2.42, 10.3);
+        box(2.53, 0.85, 9.8, 2.25, 0.1, GLASS);
+        wheel = [0.5, 6.0, 2.0];
+        break;
+      default: // sedan
+        box(1.76, 0.62, 4.5, 0.6, 0, W, 1.7, 4.3);
+        box(1.6, 0.52, 2.5, 1.17, -0.25, GLASS, 1.36, 1.5, -0.12);
+    }
+    const [wr, wb, tr] = wheel;
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const g = new THREE.CylinderGeometry(wr, wr, 0.22, 12);
+        g.rotateZ(Math.PI / 2);
+        g.translate((sx * tr) / 2, wr, (sz * wb) / 2);
+        parts.push(toBatchable(g, colArr('#1d1d22')));
+      }
+    }
+    return mergeGeometries(parts, false);
   }
 
-  /** Deterministic instanced people (figures) on sidewalks and cars (body + cabin) on roads. */
+  /**
+   * Deterministic instanced people on sidewalks and cars on roads. options.people and options.cars are
+   * each 'none' | 'few' | 'many'. Walkers face along the street (either way), standers anywhere; moving
+   * cars keep to the local traffic side, parked ones line the curb of smaller streets.
+   */
   _buildCrowd(roads) {
-    const mode = this.options.crowd;
-    if (!mode || mode === 'none') return;
-    const many = mode === 'many';
+    const density = (v) => (v === 'few' || v === 'many' ? v : null);
+    const pMode = density(this.options.people);
+    const cMode = density(this.options.cars);
+    if (!pMode && !cMode) return;
     const c = this._city.center || { lat: 0, lon: 0 };
-    const r = rng(hashStr(`crowd:${c.lat}:${c.lon}`));
+    const rp = rng(hashStr(`people:${c.lat}:${c.lon}`));
+    const rc = rng(hashStr(`cars:${c.lat}:${c.lon}`));
+    const hand = leftHandTraffic(c.lat, c.lon) ? -1 : 1;
+    const nVar = FIGURE_VARIANTS.length;
 
     const people = [];
     const cars = [];
@@ -2384,27 +2643,58 @@ export class CityRenderer {
       const w = rd.width || 6;
       const path = resamplePolyline(pts, 2);
 
-      // pedestrians: both sidewalks (or the footway itself)
-      for (const s of samplePoly(path, many ? 5 : 16, r() * 5)) {
-        if (r() > (many ? 0.7 : 0.35)) continue;
-        const side = foot ? 0 : (r() < 0.5 ? -1 : 1) * (w / 2 + 2.2);
-        const jit = (r() - 0.5) * 1.2;
-        const x = s.x + s.nx * (side + jit);
-        const y = s.y + s.ny * (side + jit);
-        const rv = r();
-        if (this._clearOf(x, y, 2.5)) people.push([x, y, rv]);
+      // pedestrians: both sidewalks (or the footway itself), sometimes walking in pairs
+      if (pMode) {
+        const many = pMode === 'many';
+        for (const s of samplePoly(path, many ? 5 : 16, rp() * 5)) {
+          if (rp() > (many ? 0.7 : 0.35)) continue;
+          const side = foot ? 0 : (rp() < 0.5 ? -1 : 1) * (w / 2 + 2.2);
+          const jit = (rp() - 0.5) * 1.2;
+          const dir = rp() < 0.5 ? 1 : -1;
+          const heading = Math.atan2(dir * s.tx, -dir * s.ty);
+          const pair = rp() < (many ? 0.25 : 0.12);
+          for (const o of pair ? [-0.33, 0.33] : [0]) {
+            const v = Math.floor(rp() * nVar);
+            const walking = FIGURE_VARIANTS[v].pose === 'walk';
+            // walkers follow the street, standers turn anywhere (a pair half-faces each other)
+            const yaw = walking ? heading + (rp() - 0.5) * 0.3 : pair ? heading + (o > 0 ? -1 : 1) * (0.6 + 0.6 * rp()) : rp() * Math.PI * 2;
+            const scale = rp() < 0.06 ? 0.62 + 0.1 * rp() : 0.93 + 0.13 * rp(); // a few children
+            const off = side + jit + o;
+            const x = s.x + s.nx * off;
+            const y = s.y + s.ny * off;
+            const cols = [rp(), rp(), rp()];
+            if (this._clearOf(x, y, 2.5)) people.push({ x, y, yaw, scale, v, cols });
+          }
+        }
       }
 
       // cars: carriageway only
-      if (!foot && w >= 5 && !(rd.lanes === 1 && w < 6)) {
-        for (const s of samplePoly(path, many ? 14 : 45, r() * 10)) {
-          if (r() > (many ? 0.55 : 0.25)) continue;
-          const side = (r() < 0.5 ? -1 : 1) * (w / 4);
-          const dir = r() < 0.5 ? 1 : -1;
-          const x = s.x + s.nx * side;
-          const y = s.y + s.ny * side;
-          const rv = r();
-          if (this._clearOf(x, y, 5)) cars.push([x, y, dir * s.tx, dir * s.ty, rv]);
+      if (cMode && !foot && w >= 5 && !(rd.lanes === 1 && w < 6)) {
+        const many = cMode === 'many';
+        const every = many ? 12 : 40;
+        const parkable = PARK_KINDS.has(kind);
+        const busOk = w >= 8 && BUS_KINDS.has(kind);
+        const weight = (e) => (e[0] === 'bus' && !busOk ? 0 : e[1]);
+        for (const s of samplePoly(path, every, rc() * every)) {
+          if (rc() > (many ? 0.6 : 0.3)) continue;
+          const parked = parkable && rc() < 0.4;
+          const sideSign = rc() < 0.5 ? -1 : 1;
+          const lateral = parked ? sideSign * (w / 2 - 1.1) : sideSign * (w / 4) + (rc() - 0.5) * 0.5;
+          // moving cars drive on the local traffic side; a few parked ones face against it
+          const dir = parked && rc() < 0.25 ? -sideSign * hand : sideSign * hand;
+          const yawJit = (rc() - 0.5) * (parked ? 0.1 : 0.04);
+          const n = parked && rc() < (many ? 0.5 : 0.2) ? 2 + Math.floor(rc() * 2) : 1; // a short row at the curb
+          let along = (rc() - 0.5) * every * 0.4;
+          for (let k = 0; k < n; k++, along += 5.2 + rc()) {
+            const type = pickWeighted(CAR_TYPES, rc(), parked ? (e) => (e[0] === 'bus' ? 0 : e[1]) : weight);
+            const col = type === 'bus' ? BUS_COLORS[Math.floor(rc() * BUS_COLORS.length)] : pickWeighted(CAR_COLORS, rc());
+            const x = s.x + s.tx * along + s.nx * lateral;
+            const y = s.y + s.ty * along + s.ny * lateral;
+            const yaw = Math.atan2(dir * s.tx, -dir * s.ty) + yawJit + (k ? (rc() - 0.5) * 0.06 : 0);
+            const gap = type === 'bus' ? 7.5 : 4.8; // keep cars from overlapping each other
+            if (cars.some((e) => Math.hypot(e.x - x, e.y - y) < (e.type === 'bus' ? 7.5 : gap))) continue;
+            if (this._clearOf(x, y, type === 'bus' ? 7 : 5)) cars.push({ x, y, yaw, type, col });
+          }
         }
       }
     }
@@ -2412,49 +2702,52 @@ export class CityRenderer {
     const m4 = new THREE.Matrix4();
     const p = new THREE.Vector3();
     const q = new THREE.Quaternion();
-    const sc = new THREE.Vector3(1, 1, 1);
+    const sc = new THREE.Vector3();
     const up = new THREE.Vector3(0, 1, 0);
     const col = new THREE.Color();
+    const place = (x, y, yaw, s) => {
+      q.setFromAxisAngle(up, yaw);
+      p.set(x, this.groundHeight(x, y), -y); // feet / wheels on the ground
+      sc.set(s, s, s);
+      return m4.compose(p, q, sc);
+    };
 
-    if (people.length) {
-      // two instanced parts: the body takes the clothing colour per instance, the head keeps its skin colour
-      const { body, head } = this._figureGeometries();
-      const bodyIM = new THREE.InstancedMesh(body, this._materialFor('people'), people.length);
-      const headIM = new THREE.InstancedMesh(head, this._materialFor('people'), people.length);
-      people.forEach(([x, y, rv], i) => {
-        p.set(x, this.groundHeight(x, y), -y); // feet on the ground
-        m4.compose(p, q, sc);
-        bodyIM.setMatrixAt(i, m4);
-        headIM.setMatrixAt(i, m4);
-        col.set(rv < 0.5 ? PAL.person : rv < 0.8 ? '#4a5a78' : '#3b3b3b');
-        bodyIM.setColorAt(i, col);
-      });
-      for (const im of [bodyIM, headIM]) {
+    // people: per variant four instanced parts sharing the matrices
+    FIGURE_VARIANTS.forEach((variant, vi) => {
+      const list = people.filter((e) => e.v === vi);
+      if (!list.length) return;
+      const geos = this._figureGeometries(variant);
+      const palettes = {
+        top: variant.coat ? COAT_COLORS : SHIRT_COLORS,
+        bottom: variant.bottom === 'skirt' ? SKIRT_COLORS : PANTS_COLORS,
+        hair: HAIR_COLORS,
+      };
+      ['top', 'bottom', 'hair', 'fixed'].forEach((part, pi) => {
+        const im = new THREE.InstancedMesh(geos[part], this._materialFor('people'), list.length);
+        list.forEach((e, i) => {
+          im.setMatrixAt(i, place(e.x, e.y, e.yaw, e.scale));
+          if (palettes[part]) im.setColorAt(i, col.set(pickWeighted(palettes[part], e.cols[pi])));
+        });
         im.instanceMatrix.needsUpdate = true;
+        if (im.instanceColor) im.instanceColor.needsUpdate = true;
         im.computeBoundingSphere();
-      }
-      if (bodyIM.instanceColor) bodyIM.instanceColor.needsUpdate = true;
-      this._registerMesh(bodyIM, 'people', 'people', 0, { name: 'people' });
-      this._registerMesh(headIM, 'people', 'people', 0, { name: 'people-heads' });
-    }
+        this._registerMesh(im, 'people', 'people', 0, { name: `people-${part}` });
+      });
+    });
 
-    if (cars.length) {
-      const geo = this._carGeometry();
-      const im = new THREE.InstancedMesh(geo, this._materialFor('people'), cars.length);
-      cars.forEach(([x, y, hx, hy, rv], i) => {
-        // local +Z is the car's length; rotate so it points along the road heading (hx, hy)
-        const ang = Math.atan2(hx, -hy);
-        q.setFromAxisAngle(up, ang);
-        p.set(x, this.groundHeight(x, y), -y);
-        m4.compose(p, q, sc);
-        im.setMatrixAt(i, m4);
-        col.set(PAL.car[Math.floor(rv * PAL.car.length) % PAL.car.length]);
-        im.setColorAt(i, col);
+    // cars: one instanced mesh per body type
+    for (const [type] of CAR_TYPES) {
+      const list = cars.filter((e) => e.type === type);
+      if (!list.length) continue;
+      const im = new THREE.InstancedMesh(this._carGeometry(type), this._materialFor('people'), list.length);
+      list.forEach((e, i) => {
+        im.setMatrixAt(i, place(e.x, e.y, e.yaw, 1));
+        im.setColorAt(i, col.set(e.col));
       });
       im.instanceMatrix.needsUpdate = true;
       if (im.instanceColor) im.instanceColor.needsUpdate = true;
       im.computeBoundingSphere();
-      this._registerMesh(im, 'people', 'people', 0, { name: 'cars' });
+      this._registerMesh(im, 'people', 'people', 0, { name: `cars-${type}` });
     }
   }
 
@@ -2573,8 +2866,13 @@ export class CityRenderer {
   /** Partial option update. Geometry-affecting keys trigger a rebuild. */
   setOptions(partial = {}) {
     const prev = { ...this.options };
+    // legacy single 'crowd' option: one density for both people and cars
+    if ('crowd' in partial) {
+      partial = { people: partial.crowd, cars: partial.crowd, ...partial };
+      delete partial.crowd;
+    }
     Object.assign(this.options, partial);
-    const geometryKeys = ['terrain', 'trees', 'details', 'lowPoly', 'leafEdge', 'season', 'crowd', 'treeStyle'];
+    const geometryKeys = ['terrain', 'trees', 'details', 'lowPoly', 'leafEdge', 'season', 'people', 'cars', 'treeStyle', 'treeType', 'treeSize'];
     const rebuild = geometryKeys.some((k) => k in partial && partial[k] !== prev[k]);
     if (rebuild) {
       if (this._city) this._buildAll();
@@ -3393,6 +3691,101 @@ const CROWN_LOBES = {
   bumpy: { lobes: [5, 6], rad: [0.36, 0.5], detail: 2, disp: 0.14 },
   fluffy: { lobes: [6, 7], rad: [0.32, 0.5], detail: 3, disp: 0.24 },
 };
+
+// Tree species mix per options.treeType ([crown kind, weight]) and size range per options.treeSize.
+const TREE_MIX = {
+  mixed: [['round', 0.6], ['columnar', 0.15], ['conifer', 0.25]],
+  broadleaf: [['round', 1]],
+  conifer: [['conifer', 1]],
+  columnar: [['columnar', 1]],
+  palm: [['palm', 1]],
+  tropical: [['palm', 0.55], ['round', 0.45]],
+};
+const TREE_SIZE = { small: [0.7, 0.75], normal: [0.95, 1.05], large: [1.25, 1.4], varied: [0.6, 1.45] };
+// Evergreen crowns: the same in every season.
+const CONIFER_CROWN = ['#2f5d3a', '#35683f', '#29523a', '#3d6f45'];
+const PALM_CROWN = ['#4f8f3a', '#5e9c40', '#467f35'];
+
+// Background figures (see _figureGeometries): pose, lower body, hair, coat, shoulder bag.
+const FIGURE_VARIANTS = [
+  { pose: 'walk', bottom: 'pants', hair: 'short' },
+  { pose: 'walk', bottom: 'skirt', hair: 'long' },
+  { pose: 'stand', bottom: 'pants', hair: 'short', bag: true },
+  { pose: 'walk', bottom: 'pants', hair: 'bun', coat: true },
+  { pose: 'phone', bottom: 'skirt', hair: 'long' },
+  { pose: 'stand', bottom: 'pants', hair: 'short', coat: true },
+  { pose: 'walk', bottom: 'pants', hair: 'short', bag: true },
+  { pose: 'phone', bottom: 'pants', hair: 'bun' },
+];
+// [colour, weight] palettes for pickWeighted
+const SHIRT_COLORS = [['#f4f4f2', 5], ['#2b2f3a', 3], ['#5d7896', 2], ['#c9b48f', 2], ['#9a3b35', 1], ['#6f8a5a', 1], ['#d9a441', 1], ['#8c8f96', 2]];
+const COAT_COLORS = [['#2a2c33', 4], ['#a68a64', 3], ['#56606e', 2], ['#7a3b34', 1], ['#d8d2c4', 1]];
+const PANTS_COLORS = [['#2f3a52', 4], ['#26262b', 4], ['#6b6f78', 2], ['#b9a98a', 2], ['#47556e', 2]];
+const SKIRT_COLORS = [['#2a2c38', 3], ['#7d8fa8', 2], ['#9c4a4a', 1], ['#c9bc9f', 2], ['#4d5a43', 1]];
+const HAIR_COLORS = [['#1c1a1a', 6], ['#3a2a22', 4], ['#6a4a32', 2], ['#b08a55', 1], ['#9a9a9a', 1]];
+
+// Car body types [name, weight]; buses only on wide main roads. Colours lean white / silver / black like real traffic.
+const CAR_TYPES = [['sedan', 30], ['compact', 22], ['kei', 14], ['suv', 14], ['van', 8], ['pickup', 7], ['bus', 5]];
+const CAR_COLORS = [
+  ['#f2f2f4', 25], ['#c3c7cc', 15], ['#26262b', 15], ['#7c8189', 10], ['#2e3f63', 8], ['#b8352b', 8],
+  ['#3a6ea5', 6], ['#d8c9a8', 5], ['#3f5d45', 4], ['#e5b93a', 2], ['#8a2433', 2],
+];
+const BUS_COLORS = ['#f2f2f4', '#3a6ea5', '#2f8a5c', '#e5b93a'];
+const PARK_KINDS = new Set(['residential', 'unclassified', 'living_street', 'service', 'tertiary']);
+const BUS_KINDS = new Set(['primary', 'secondary', 'trunk', 'tertiary', 'primary_link', 'secondary_link']);
+
+/** Weighted pick from [[value, weight], ...] with u in [0, 1); weightOf may override the weights. */
+function pickWeighted(list, u, weightOf = (e) => e[1]) {
+  let total = 0;
+  for (const e of list) total += weightOf(e);
+  let acc = 0;
+  for (const e of list) {
+    acc += weightOf(e);
+    if (u * total < acc) return e[0];
+  }
+  return list[list.length - 1][0];
+}
+
+/** Rough check for the countries that drive on the left (Japan, UK and Ireland, South and Southeast Asia, Oceania, southern Africa). */
+function leftHandTraffic(lat, lon) {
+  const boxes = [
+    [24, 46, 122, 146], // Japan
+    [49.8, 61, -11, 2], // UK, Ireland
+    [-44, -10, 112, 154], // Australia
+    [-48, -34, 166, 179], // New Zealand
+    [6, 36, 68, 92], // India
+    [5.5, 20.5, 97.5, 105.7], // Thailand
+    [-11, 7, 95, 141.5], // Indonesia, Malaysia, Singapore
+    [22.1, 22.6, 113.8, 114.5], // Hong Kong
+    [-35, -22, 16, 33], // South Africa
+  ];
+  return boxes.some(([a, b, c, d]) => lat >= a && lat <= b && lon >= c && lon <= d);
+}
+
+/** Rounded limb from a to b ([x, y, z]): a cylinder tapering from radius ra to rb with ball ends. */
+function limb(a, b, ra, rb, col) {
+  const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+  const len = d.length() || 1e-3;
+  const g = new THREE.CylinderGeometry(rb, ra, len, 10, 1, true); // top (+Y) end is b
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+  g.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+  const ea = new THREE.SphereGeometry(ra, 10, 6);
+  ea.translate(...a);
+  const eb = new THREE.SphereGeometry(rb, 10, 6);
+  eb.translate(...b);
+  return mergeGeometries([toBatchable(g, col), toBatchable(ea, col), toBatchable(eb, col)], false);
+}
+
+/** Box w x h x d centred at the origin whose top face is topW x topD and shifted by shift in z (car hoods, cabins). */
+function taperBox(w, h, d, topW, topD, shift, col) {
+  const g = new THREE.BoxGeometry(w, h, d).toNonIndexed();
+  const pos = g.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    if (pos.getY(i) > 0) pos.setXYZ(i, (pos.getX(i) * topW) / w, pos.getY(i), (pos.getZ(i) * topD) / d + shift);
+  }
+  g.deleteAttribute('normal');
+  return toBatchable(g, col);
+}
 
 /** One crown lobe: icosahedron at (cx, cy, cz) with per-vertex noise displacement and smooth normals. */
 function crownLobe(cx, cy, cz, rad, detail, disp) {

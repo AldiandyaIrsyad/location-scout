@@ -442,7 +442,10 @@ function readOptions() {
     season: $('season').value,
     treeStyle: $('treeStyle').value,
     leafEdge: $('leafEdge').value,
-    crowd: $('crowd').value,
+    treeType: $('treeType').value,
+    treeSize: $('treeSize').value,
+    people: $('people').value,
+    cars: $('cars').value,
     twoSidedShadows: $('shadowSide').value === 'double',
   };
 }
@@ -555,7 +558,7 @@ $('recenterBtn').addEventListener('click', () => {
   Object.assign(state, { lat, lon, name: `${lat.toFixed(5)}, ${lon.toFixed(5)}` });
   build();
 });
-for (const id of ['optStraight', 'optShadows', 'optWindows', 'optTerrain', 'optTrees', 'optDetails', 'optLowPoly', 'season', 'treeStyle', 'leafEdge', 'crowd']) {
+for (const id of ['optStraight', 'optShadows', 'optWindows', 'optTerrain', 'optTrees', 'optDetails', 'optLowPoly', 'season', 'treeStyle', 'leafEdge', 'treeType', 'treeSize', 'people', 'cars']) {
   $(id).addEventListener('change', applyOptions);
 }
 bindRange('detailDist', (v) => `${Math.round(v * 100)}%`, () => { savePref('detailDist'); applyOptions(); });
@@ -830,7 +833,7 @@ if (EMBED) {
       style: state.style, lens: state.lens, rot: +pose.yaw.toFixed(4),
       pin: state.pin.map((v) => +v.toFixed(2)),
       camera: { position: pose.position.toArray().map((v) => +v.toFixed(2)), yaw: +pose.yaw.toFixed(4), pitch: +pose.pitch.toFixed(4) },
-      options: { terrain: $('optTerrain').checked, trees: $('optTrees').checked, details: $('optDetails').checked, season: $('season').value, crowd: $('crowd').value },
+      options: { terrain: $('optTerrain').checked, trees: $('optTrees').checked, details: $('optDetails').checked, season: $('season').value, people: $('people').value, cars: $('cars').value },
       name: String(state.name || '').slice(0, 80),
       link: location.href.split('#')[0] + hashString(),
     };

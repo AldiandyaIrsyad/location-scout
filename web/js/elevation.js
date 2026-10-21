@@ -8,7 +8,9 @@
  * ("" when no data was available, and the grid is then flat).
  */
 export async function fetchElevation({ lat, lon, size, n = 129, signal }) {
-  const query = new URLSearchParams({ lat: String(lat), lon: String(lon), size: String(size), n: String(n) });
+  // Version the request as well as the server result cache, so a browser's old
+  // terrain response cannot hide a newly corrected elevation source.
+  const query = new URLSearchParams({ lat: String(lat), lon: String(lon), size: String(size), n: String(n), v: '4' });
   const res = await fetch(`api/elevation?${query}`, { signal, headers: { Accept: 'application/json' } });
   let body = null;
   try {

@@ -3,6 +3,7 @@ package elevation
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,7 +36,45 @@ const (
 
 	gsiNoData   = 1 << 23 // GSI encodes "no data" as 2^23
 	gsiWrapSpan = 1 << 24
+
+	monasLatitude        = -6.1754
+	monasLongitude       = 106.8272
+	monasInnerHalfMetres = 500.0
+	monasOuterHalfMetres = 900.0
+	monasCuratedSource   = "Open-Elevation srtm-250m (Monas curated)"
 )
+
+// monasTerrainJSON is a bounded, checked-in snapshot. It avoids making the public elevation API a
+// runtime dependency while keeping the source and dataset explicit in the served grid metadata.
+// The snapshot covers a 2 km square; only its inner 900 m halfextent is used by the correction.
+//
+//go:embed monas_srtm250m.json
+var monasTerrainJSON []byte
+
+type curatedTerrain struct {
+	Name             string  `json:"name"`
+	Source           string  `json:"source"`
+	SourceURL        string  `json:"sourceURL"`
+	Dataset          string  `json:"dataset"`
+	ResolutionMetres float64 `json:"resolutionMetres"`
+	RetrievedDate    string  `json:"retrievedDate"`
+	Center           struct {
+		Latitude  float64 `json:"latitude"`
+		Longitude float64 `json:"longitude"`
+	} `json:"center"`
+	SizeMetres float64    `json:"sizeMetres"`
+	N          int        `json:"n"`
+	StepMetres float64    `json:"stepMetres"`
+	Elevations []*float64 `json:"elevations"`
+}
+
+var monasTerrain = func() curatedTerrain {
+	var data curatedTerrain
+	if err := json.Unmarshal(monasTerrainJSON, &data); err != nil {
+		panic(fmt.Sprintf("elevation: invalid Monas terrain snapshot: %v", err))
+	}
+	return data
+}()
 
 // tileSource is one elevation tile provider.
 type tileSource struct {
@@ -253,7 +292,7 @@ func (s *GridService) Grid(ctx context.Context, lat, lon, size float64, n int) (
 }
 
 func cacheKey(lat, lon, size float64, n int) string {
-	return fmt.Sprintf("elev:v3:%.5f:%.5f:%s:%d", lat, lon, strconv.FormatFloat(size, 'f', -1, 64), n)
+	return fmt.Sprintf("elev:v4:%.5f:%.5f:%s:%d", lat, lon, strconv.FormatFloat(size, 'f', -1, 64), n)
 }
 
 // build samples the sources in order. degraded reports whether the resulting grid is incomplete or
@@ -297,6 +336,9 @@ func (s *GridService) build(ctx context.Context, lat, lon, size float64, n int) 
 	// Unresolved cells become zero-valued entries in the relative float32 grid below. Keep that
 	// degraded grid out of the result cache so a later request can recover missing source data.
 	degraded = degraded || anyNaN(absolute)
+	if applyMonasCorrection(lat, lon, size, n, absolute) {
+		used = append(used, monasCuratedSource)
+	}
 	centre := n/2 + (n/2)*n
 	centreHeight := absolute[centre]
 	if math.IsNaN(centreHeight) || math.IsInf(centreHeight, 0) {
@@ -439,6 +481,91 @@ func (s *GridService) loadTiles(ctx context.Context, src tileSource, z, tx0, tx1
 
 func flatGrid(size float64, n int) *Grid {
 	return &Grid{Size: size, N: n, Heights: make([]float32, n*n)}
+}
+
+// monasCorrectionWeight is one across the central 1 km square and fades to zero at the 1.8 km
+// square boundary. Smoothstep gives both boundaries a zero slope, so blending the curated surface
+// into the live provider does not introduce a seam.
+func monasCorrectionWeight(x, y float64) float64 {
+	d := math.Max(math.Abs(x), math.Abs(y))
+	if d <= monasInnerHalfMetres {
+		return 1
+	}
+	if d >= monasOuterHalfMetres {
+		return 0
+	}
+	t := (d - monasInnerHalfMetres) / (monasOuterHalfMetres - monasInnerHalfMetres)
+	return 1 - t*t*(3-2*t)
+}
+
+// curatedHeightAt interpolates the checked-in Open-Elevation snapshot. A missing response cell
+// remains missing: null is never treated as sea level or as a zero-valued sample.
+func curatedHeightAt(data curatedTerrain, x, y float64) (float64, bool) {
+	if data.N < 2 || data.StepMetres <= 0 || len(data.Elevations) != data.N*data.N {
+		return 0, false
+	}
+	half := data.SizeMetres / 2
+	if x < -half || x > half || y < -half || y > half {
+		return 0, false
+	}
+	u := (x + half) / data.StepMetres
+	v := (half - y) / data.StepMetres
+	i0, tx := int(math.Floor(u)), u-math.Floor(u)
+	j0, ty := int(math.Floor(v)), v-math.Floor(v)
+	if i0 >= data.N-1 {
+		i0, tx = data.N-2, 1
+	}
+	if j0 >= data.N-1 {
+		j0, ty = data.N-2, 1
+	}
+	if i0 < 0 || j0 < 0 {
+		return 0, false
+	}
+	idx := func(i, j int) int { return i + j*data.N }
+	v00, v10 := data.Elevations[idx(i0, j0)], data.Elevations[idx(i0+1, j0)]
+	v01, v11 := data.Elevations[idx(i0, j0+1)], data.Elevations[idx(i0+1, j0+1)]
+	if v00 == nil || v10 == nil || v01 == nil || v11 == nil {
+		return 0, false
+	}
+	a := *v00 + (*v10-*v00)*tx
+	b := *v01 + (*v11-*v01)*tx
+	return a + (b-a)*ty, true
+}
+
+// applyMonasCorrection blends the curated absolute surface into the raw absolute grid only within
+// the known Monas park bounds. The local coordinates are relative to the Monas landmark, so a grid
+// request slightly offset from the place still receives the same bounded correction region.
+func applyMonasCorrection(lat, lon, size float64, n int, absolute []float64) bool {
+	if n < 2 || len(absolute) != n*n {
+		return false
+	}
+	step := size / float64(n-1)
+	origin := geo.ToLocal(lat, lon, monasLatitude, monasLongitude)
+	half := size / 2
+	changed := false
+	for j := 0; j < n; j++ {
+		y := half - float64(j)*step
+		for i := 0; i < n; i++ {
+			x := -half + float64(i)*step
+			monasX, monasY := origin[0]+x, origin[1]+y
+			weight := monasCorrectionWeight(monasX, monasY)
+			if weight <= 0 {
+				continue
+			}
+			curated, ok := curatedHeightAt(monasTerrain, monasX, monasY)
+			if !ok {
+				continue
+			}
+			k := i + j*n
+			if math.IsNaN(absolute[k]) || math.IsInf(absolute[k], 0) {
+				absolute[k] = curated
+			} else {
+				absolute[k] = absolute[k]*(1-weight) + curated*weight
+			}
+			changed = true
+		}
+	}
+	return changed
 }
 
 func anyNaN(v []float64) bool {

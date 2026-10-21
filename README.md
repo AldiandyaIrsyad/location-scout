@@ -133,3 +133,8 @@ The frontend also has an **embed API** for host pages (see `web/embed-demo.html`
 
 Map data © OpenStreetMap contributors (ODbL), https://www.openstreetmap.org/copyright.
 Elevation: GSI Japan and Terrain Tiles (AWS Open Data). Place search: Nominatim.
+
+Monas also uses a bounded, checked-in Open-Elevation `srtm-250m` correction to replace a steep
+Terrain Tiles artifact across the park. The grid reports both sources; its 250 m sampling is
+appropriate for broad ground shape and does not reconstruct paving, steps, or small earthworks.
+Snapshot provenance is in `internal/elevation/monas_srtm250m.json`.

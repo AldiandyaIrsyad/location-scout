@@ -512,7 +512,7 @@ func TestResultCacheAvoidsRefetch(t *testing.T) {
 		}
 	}
 
-	const wantKey = "elev:v3:37.42000:-122.08000:200:9"
+	const wantKey = "elev:v4:37.42000:-122.08000:200:9"
 	if len(results.keys) != 1 || results.keys[0] != wantKey {
 		t.Fatalf("result cache keys = %v, want [%s]", results.keys, wantKey)
 	}
@@ -587,8 +587,8 @@ func TestCorruptTileAndUnresolvedSamplesAreNotCached(t *testing.T) {
 	if f.callCount() <= firstCalls {
 		t.Fatal("healthy request reused the incomplete result instead of rebuilding")
 	}
-	if len(results.keys) != 1 || results.keys[0] != "elev:v3:37.42000:-122.08000:200:17" {
-		t.Fatalf("result cache keys = %v, want one v3 entry", results.keys)
+	if len(results.keys) != 1 || results.keys[0] != "elev:v4:37.42000:-122.08000:200:17" {
+		t.Fatalf("result cache keys = %v, want one v4 entry", results.keys)
 	}
 	if second.Source == "" || math.IsInf(second.BaseElevation, 0) || math.IsNaN(second.BaseElevation) {
 		t.Fatalf("rebuilt grid metadata = source %q base %v, want finite terrain", second.Source, second.BaseElevation)
@@ -655,6 +655,97 @@ func TestGridRejectsBadArguments(t *testing.T) {
 	}
 	if _, err := svc.Grid(context.Background(), 0, 0, 0, 9); err == nil {
 		t.Fatal("size <= 0 must fail")
+	}
+}
+
+func TestMonasCorrectionWeightHasBoundedSmoothFade(t *testing.T) {
+	if got := monasCorrectionWeight(0, 0); got != 1 {
+		t.Fatalf("centre weight = %v, want 1", got)
+	}
+	if got := monasCorrectionWeight(500, -500); got != 1 {
+		t.Fatalf("inner boundary weight = %v, want 1", got)
+	}
+	if got := monasCorrectionWeight(900, 0); got != 0 {
+		t.Fatalf("outer boundary weight = %v, want 0", got)
+	}
+	if got := monasCorrectionWeight(1000, 1000); got != 0 {
+		t.Fatalf("outside weight = %v, want 0", got)
+	}
+	if got := monasCorrectionWeight(700, 0); !(got > 0 && got < 1) {
+		t.Fatalf("fade weight = %v, want (0,1)", got)
+	}
+	if left, right := monasCorrectionWeight(500.001, 0), monasCorrectionWeight(899.999, 0); !(left < 1 && right > 0) {
+		t.Fatalf("fade does not approach both boundaries: inner=%v outer=%v", left, right)
+	}
+}
+
+func TestMonasCorrectionUsesCuratedAbsoluteHeights(t *testing.T) {
+	const lat, lon = monasLatitude, monasLongitude
+	surface := terrain(lat, lon)
+	f := &fakeFetcher{route: func(rawURL string) ([]byte, error) {
+		z, x, y := parseTileURL(t, rawURL, terrariumPrefix)
+		return renderTile(z, x, y, func(la, lo float64) [4]uint8 {
+			return encodeTerrarium(surface(la, lo))
+		}), nil
+	}}
+	g, err := newTestService(f, newMemCache()).Grid(context.Background(), lat, lon, 2000, 9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(g.Source, monasCuratedSource) {
+		t.Fatalf("Source = %q, want curated source", g.Source)
+	}
+	wantCentre := *monasTerrain.Elevations[40]
+	if math.Abs(g.BaseElevation-wantCentre) > 1e-5 {
+		t.Fatalf("BaseElevation = %.6f, want curated centre %.6f", g.BaseElevation, wantCentre)
+	}
+	centre := 4 + 4*9
+	if math.Abs(float64(g.Heights[centre])) > 1e-5 {
+		t.Fatalf("centre relative height = %v, want 0", g.Heights[centre])
+	}
+	for k, h := range g.Heights {
+		if math.IsNaN(float64(h)) || math.IsInf(float64(h), 0) {
+			t.Fatalf("heights[%d] = %v, want finite", k, h)
+		}
+	}
+	// x=+1000 m is outside the correction square, so it must retain the raw Terrarium surface.
+	eastEdge := 8 + 4*9
+	if got := g.BaseElevation + float64(g.Heights[eastEdge]); math.Abs(got-200) > tolMetres {
+		t.Fatalf("east edge absolute height = %.3f, want raw %.3f", got, 200.0)
+	}
+	// x=0,y=+500 m is inside the full-strength square and lands exactly on the curated sample.
+	northInner := 4 + 2*9
+	wantNorthInner := *monasTerrain.Elevations[northInner]
+	if got := g.BaseElevation + float64(g.Heights[northInner]); math.Abs(got-wantNorthInner) > 1e-4 {
+		t.Fatalf("north inner absolute height = %.6f, want curated %.6f", got, wantNorthInner)
+	}
+}
+
+func TestMonasCorrectionLeavesNonMonasUnchanged(t *testing.T) {
+	abs := make([]float64, 9*9)
+	for i := range abs {
+		abs[i] = 42
+	}
+	if applyMonasCorrection(37.42, -122.08, 2000, 9, abs) {
+		t.Fatal("non-Monas grid was marked corrected")
+	}
+	for i, got := range abs {
+		if got != 42 {
+			t.Fatalf("non-Monas absolute[%d] = %v, want 42", i, got)
+		}
+	}
+}
+
+func TestCuratedHeightMissingCellIsNotZero(t *testing.T) {
+	a, b, c := 1.0, 2.0, 3.0
+	data := curatedTerrain{
+		SizeMetres: 2,
+		N:          2,
+		StepMetres: 1,
+		Elevations: []*float64{&a, nil, &b, &c},
+	}
+	if got, ok := curatedHeightAt(data, 0, 0); ok || got != 0 {
+		t.Fatalf("missing cell interpolated as %v (ok=%v), want no value", got, ok)
 	}
 }
 

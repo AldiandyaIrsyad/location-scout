@@ -18,7 +18,8 @@ import { viewDepthRange } from './camera-fit.js';
 import { composeContext } from './context.js';
 import { clipTriangle, clipSegment, drapeTriangle, groundGridHeight } from './surface-geometry.js';
 import { courtKind, courtLayout, courtSurface, courtToLocal, pitchFrame } from './courts.js';
-import { BARRIER_STYLES, barrierHeight, barrierRuns, fixtureFacing, roadIndex } from './barriers.js';
+import { BARRIER_GROUPS, BARRIER_STYLES, barrierHeight, barrierRuns, fixtureFacing, roadIndex } from './barriers.js';
+import { benchColor, benchParts, roofColors, roofShapeFor, wallColors } from './scenestyle.js';
 import { paletteFor } from './palette.js';
 
 const DEG = Math.PI / 180;
@@ -85,7 +86,6 @@ const PAL = {
   goal: '#f4f4f0',
   netPost: '#5a5f66',
   netTape: '#f4f4f0',
-  benchWood: '#9c6b3f',
   benchFrame: '#4a4f55',
   bin: '#4c6a58',
   binLid: '#3b4a41',
@@ -1372,6 +1372,12 @@ export class CityRenderer {
       treeSizeMin: 0.95, treeSizeMax: 1.05,
       landmarks: true, // replace famous landmarks with hand-built models (see landmarks.js)
       detailPoles: true, detailSignals: true, detailRails: true, detailCrosswalks: true, detailTactile: true,
+      roofStyle: 'auto', // auto (as mapped) | flat | gabled | hipped | pyramidal
+      roofColor: 'auto', // auto (by place) | zinc | slate | terracotta | copper | charcoal
+      wallTone: 'auto', // auto (by place) | stone | white | brick | grey
+      furnBenches: true, furnBins: true, furnStops: true,
+      benchStyle: 'park', benchColor: 'wood', binStyle: 'square', // see scenestyle.js
+      barrierFences: true, barrierWalls: true, barrierHedges: true, barrierScale: 1,
       straightVerticals: false,
       twoSidedShadows: false,
     };
@@ -1961,7 +1967,8 @@ export class CityRenderer {
     for (const bar of barriers || []) {
       const style = BARRIER_STYLES[bar.kind];
       if (!style || !bar.points || bar.points.length < 2) continue;
-      const H = barrierHeight(bar), col = colArr(style.color);
+      if (this.options[BARRIER_GROUPS[bar.kind]] === false) continue;
+      const H = barrierHeight(bar) * clamp(Number(this.options.barrierScale) || 1, 0.3, 3), col = colArr(style.color);
       const batch = batches[bar.context ? 1 : 0];
       // the ground only exists out to `half`: trim each run to it
       const inside = ([x, y]) => Math.abs(x) <= half && Math.abs(y) <= half;
@@ -2007,7 +2014,13 @@ export class CityRenderer {
   _buildFixtures(fixtures, roads) {
     const batch = new Batch();
     const half = this._landHalf;
+    const o = this.options;
+    const shown = { bench: o.furnBenches, waste_basket: o.furnBins, bus_stop: o.furnStops };
+    const seat = benchColor(o.benchColor);
+    const benchHex = { seat, frame: PAL.benchFrame, stone: '#bdb7aa' };
+    const parts = benchParts(o.benchStyle);
     for (const f of fixtures || []) {
+      if (shown[f.kind] === false) continue;
       const [x, y] = f.position || [];
       if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > half || Math.abs(y) > half) continue;
       const yaw = fixtureFacing(f, roads), c = Math.cos(yaw), s = Math.sin(yaw);
@@ -2015,13 +2028,16 @@ export class CityRenderer {
       const box = (u0, u1, v0, v1, h0, h1, hex) => this._prism(
         batch, [[u0, v0], [u1, v0], [u1, v1], [u0, v1]].map(([u, v]) => [x + u * c - v * s, y + u * s + v * c]), h0, h1, colArr(hex));
       if (f.kind === 'bench') {
-        box(-0.22, 0.22, -0.8, 0.8, 0.42, 0.47, PAL.benchWood); // seat
-        box(-0.26, -0.2, -0.8, 0.8, 0.47, 0.9, PAL.benchWood); // back
-        box(-0.2, 0.2, -0.72, -0.64, 0, 0.42, PAL.benchFrame);
-        box(-0.2, 0.2, 0.64, 0.72, 0, 0.42, PAL.benchFrame);
+        for (const p of parts) box(p.u0, p.u1, p.v0, p.v1, p.h0, p.h1, benchHex[p.role]);
       } else if (f.kind === 'waste_basket') {
-        box(-0.2, 0.2, -0.2, 0.2, 0, 0.8, PAL.bin);
-        box(-0.23, 0.23, -0.23, 0.23, 0.8, 0.86, PAL.binLid);
+        if (o.binStyle === 'round') {
+          const ring = (r) => Array.from({ length: 8 }, (_, i) => [r * Math.cos((i + 0.5) * Math.PI / 4), r * Math.sin((i + 0.5) * Math.PI / 4)]);
+          this._prism(batch, ring(0.23).map(([u, v]) => [x + u, y + v]), 0, 0.85, colArr(PAL.bin));
+          this._prism(batch, ring(0.26).map(([u, v]) => [x + u, y + v]), 0.85, 0.91, colArr(PAL.binLid));
+        } else {
+          box(-0.2, 0.2, -0.2, 0.2, 0, 0.8, PAL.bin);
+          box(-0.23, 0.23, -0.23, 0.23, 0.8, 0.86, PAL.binLid);
+        }
       } else if (f.kind === 'bus_stop') {
         box(-0.05, 0.05, -0.05, 0.05, 0, 2.8, PAL.stopPole);
         box(-0.2, 0.2, -0.02, 0.02, 2.2, 2.75, PAL.stopSign); // the sign plate faces along the road
@@ -2073,7 +2089,10 @@ export class CityRenderer {
       const height = Math.max(mappedHeight, minH + 0.05);
       // Procedural roof primitives cannot preserve courtyards. Unknown shapes such as OSM
       // "many" must keep the mapped cap rather than becoming a bounding-box gable.
-      const flat = surroundings || lowPoly || holes.length > 0 || !['pyramidal', 'hipped', 'gabled'].includes(b.roofShape);
+      // monuments, steps, sheds and landmark bases are solid: no window grid on their walls
+      const solid = b.noWindows || NO_WINDOW_KINDS.has(b.kind);
+      const shape = roofShapeFor({ mapped: b.roofShape, style: this.options.roofStyle, height, plain: surroundings || lowPoly || holes.length > 0, solid });
+      const flat = !shape;
       const roofH = flat ? 0 : clamp(b.roofHeight ?? 3, 0.5, Math.max(0.5, height - minH - 1.5));
       const base = groundC + minH;
       const bottom = minH > 0 ? base : Math.min(base, groundMin);
@@ -2085,11 +2104,9 @@ export class CityRenderer {
       const mult = 0.95 + 0.1 * r();
       // floor the brightness: a mapped "black" would otherwise render as a flat hole with no shading
       const wc = colArr(hex).map((v) => clamp(v * mult, 0.12, 1));
-      // monuments, steps, sheds and landmark bases are solid: no window grid on their walls
-      const solid = b.noWindows || NO_WINDOW_KINDS.has(b.kind);
       // A solid terrace or plinth is one stone surface: its top matches its walls instead of a random roof tile.
-      const roofColors = this._palette.roofs;
-      const roofPick = colArr(roofColors[Math.floor(r() * roofColors.length)]);
+      const roofSet = roofColors(this._palette, this.options.roofColor);
+      const roofPick = colArr(roofSet[Math.floor(r() * roofSet.length)]);
       const rc = solid ? wc.map((v) => clamp(v * 1.03, 0, 1)) : roofPick;
       const v0 = wallsB.p.length / 3;
       addWalls(wallsB, outer, holes, bottom, wallTop, wc);
@@ -2098,7 +2115,7 @@ export class CityRenderer {
       if (flat) {
         addCap(roofsB, outer, holes, topAbs, rc);
       } else {
-        addRoof(roofsB, outer, wallTop, roofH, b.roofShape, rc);
+        addRoof(roofsB, outer, wallTop, roofH, shape, rc);
       }
     }
     // hand-built landmark models go in with the roofs (no window grid on a lattice tower)
@@ -2118,8 +2135,7 @@ export class CityRenderer {
   }
 
   _wallPick(b, r) {
-    const walls = this._palette.walls;
-    const list = walls[b.kind] || walls.default;
+    const list = wallColors(this._palette, b.kind, this.options.wallTone);
     return list[Math.floor(r() * list.length)];
   }
 
@@ -4518,6 +4534,8 @@ const WORLD_KEYS = [
   'carDensity', 'carParked', 'carQueue', 'carTypes', 'carPalette', 'trafficSide', 'worldSeed',
   'treeDensity', 'treeMix', 'treeSizeMin', 'treeSizeMax',
   'landmarks', 'detailPoles', 'detailSignals', 'detailRails', 'detailCrosswalks', 'detailTactile',
+  'roofStyle', 'roofColor', 'wallTone', 'furnBenches', 'furnBins', 'furnStops', 'benchStyle', 'benchColor', 'binStyle',
+  'barrierFences', 'barrierWalls', 'barrierHedges', 'barrierScale',
 ];
 /**
  * Species mix for a place from its latitude / longitude, so the tropics get spreading rain trees and

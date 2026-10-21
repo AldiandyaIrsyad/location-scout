@@ -179,8 +179,29 @@
         <div class="overlay top-right world">
           <button class="btn small" id="worldBtn" aria-expanded="false" title="What is in the scene: people, cars, trees and street details." data-i18n-attr="title:tip.world" data-i18n="btn.world">🌍 World settings</button>
           <div class="popover" id="worldPop" hidden>
-                <h3 data-i18n="h.worldPeople">People</h3>
-                <label class="slider" data-i18n-attr="title:tip.peopleDensity"><span data-i18n="label.peopleDensity">Density</span> <input type="range" id="wPeople" min="0" max="100" step="1" value="35" /><output id="wPeopleOut">35%</output></label>
+          <div class="wbar">
+            <strong data-i18n="h.worldTitle">World settings</strong>
+            <span class="wbar-btns">
+              <button class="btn small" id="worldWideBtn" type="button" aria-pressed="false" title="Wide panel, two columns" data-i18n-attr="title:tip.worldWide" data-i18n="btn.worldWide">⇔ Wide</button>
+              <button class="btn small" id="worldCloseBtn" type="button" aria-label="Close" title="Close">✕</button>
+            </span>
+          </div>
+          <div class="wsections">
+<details class="wsec" open><summary data-i18n="h.worldBuildings">Buildings</summary><div class="wbody">
+<label class="inline" data-i18n-attr="title:tip.roofStyle"><span data-i18n="label.roofStyle">Roof type</span> <select id="wRoofStyle"><option value="auto" selected data-i18n="roofStyle.auto">As mapped</option><option value="flat" data-i18n="roofStyle.flat">All flat</option><option value="gabled" data-i18n="roofStyle.gabled">Gabled</option><option value="hipped" data-i18n="roofStyle.hipped">Hipped</option><option value="pyramidal" data-i18n="roofStyle.pyramidal">Pyramid</option></select></label>
+<label class="inline" data-i18n-attr="title:tip.roofColor"><span data-i18n="label.roofColor">Roof colour</span> <select id="wRoofColor"><option value="auto" selected data-i18n="roofColor.auto">Auto (by place)</option><option value="zinc" data-i18n="roofColor.zinc">Zinc grey</option><option value="slate" data-i18n="roofColor.slate">Slate</option><option value="terracotta" data-i18n="roofColor.terracotta">Terracotta</option><option value="copper" data-i18n="roofColor.copper">Green copper</option><option value="charcoal" data-i18n="roofColor.charcoal">Charcoal</option></select></label>
+<label class="inline" data-i18n-attr="title:tip.wallTone"><span data-i18n="label.wallTone">Wall colour</span> <select id="wWallTone"><option value="auto" selected data-i18n="wallTone.auto">Auto (by place)</option><option value="stone" data-i18n="wallTone.stone">Cream stone</option><option value="white" data-i18n="wallTone.white">White</option><option value="brick" data-i18n="wallTone.brick">Brick</option><option value="grey" data-i18n="wallTone.grey">Concrete grey</option></select></label>
+</div></details>
+<details class="wsec" open><summary data-i18n="h.worldFurniture">Street furniture</summary><div class="wbody">
+<div class="checks wrap"><label data-i18n-attr="title:tip.benches"><input type="checkbox" id="wBenches" checked /> <span data-i18n="label.benches">Benches</span></label><label data-i18n-attr="title:tip.bins"><input type="checkbox" id="wBins" checked /> <span data-i18n="label.bins">Bins</span></label><label data-i18n-attr="title:tip.stops"><input type="checkbox" id="wStops" checked /> <span data-i18n="label.stops">Bus stops</span></label></div>
+<label class="inline" data-i18n-attr="title:tip.benchStyle"><span data-i18n="label.benchStyle">Bench type</span> <select id="wBenchStyle"><option value="park" selected data-i18n="benchStyle.park">Park bench</option><option value="backless" data-i18n="benchStyle.backless">Backless</option><option value="stone" data-i18n="benchStyle.stone">Stone block</option><option value="picnic" data-i18n="benchStyle.picnic">Picnic table</option></select></label>
+<label class="inline" data-i18n-attr="title:tip.benchColor"><span data-i18n="label.benchColor">Bench colour</span> <select id="wBenchColor"><option value="wood" selected data-i18n="benchColor.wood">Wood</option><option value="green" data-i18n="benchColor.green">Green</option><option value="black" data-i18n="benchColor.black">Black</option><option value="white" data-i18n="benchColor.white">White</option><option value="blue" data-i18n="benchColor.blue">Blue</option></select></label>
+<label class="inline" data-i18n-attr="title:tip.binStyle"><span data-i18n="label.binStyle">Bin shape</span> <select id="wBinStyle"><option value="square" selected data-i18n="binStyle.square">Square</option><option value="round" data-i18n="binStyle.round">Round</option></select></label>
+<div class="checks wrap"><label data-i18n-attr="title:tip.fences"><input type="checkbox" id="wFences" checked /> <span data-i18n="label.fences">Fences &amp; rails</span></label><label data-i18n-attr="title:tip.walls"><input type="checkbox" id="wWalls" checked /> <span data-i18n="label.walls">Walls</span></label><label data-i18n-attr="title:tip.hedges"><input type="checkbox" id="wHedges" checked /> <span data-i18n="label.hedges">Hedges</span></label></div>
+<label class="slider" data-i18n-attr="title:tip.barrierScale"><span data-i18n="label.barrierScale">Fence height</span> <input type="range" id="wBarrierScale" min="0.5" max="2" step="0.1" value="1" /><output id="wBarrierScaleOut">1.00×</output></label>
+</div></details>
+<details class="wsec"><summary data-i18n="h.worldPeople">People</summary><div class="wbody">
+<label class="slider" data-i18n-attr="title:tip.peopleDensity"><span data-i18n="label.peopleDensity">Density</span> <input type="range" id="wPeople" min="0" max="100" step="1" value="35" /><output id="wPeopleOut">35%</output></label>
                 <label class="slider" data-i18n-attr="title:tip.walkShare"><span data-i18n="label.walkShare">Walking</span> <input type="range" id="wWalk" min="0" max="100" step="5" value="75" /><output id="wWalkOut">75</output></label>
                 <label class="slider" data-i18n-attr="title:tip.standShare"><span data-i18n="label.standShare">Standing</span> <input type="range" id="wStand" min="0" max="100" step="5" value="15" /><output id="wStandOut">15</output></label>
                 <label class="slider" data-i18n-attr="title:tip.talkShare"><span data-i18n="label.talkShare">Talking groups</span> <input type="range" id="wTalk" min="0" max="100" step="5" value="10" /><output id="wTalkOut">10</output></label>
@@ -188,8 +209,9 @@
                 <label class="slider" data-i18n-attr="title:tip.kidsShare"><span data-i18n="label.kidsShare">Children</span> <input type="range" id="wKids" min="0" max="50" step="1" value="6" /><output id="wKidsOut">6%</output></label>
                 <label class="slider" data-i18n-attr="title:tip.crossing"><span data-i18n="label.crossing">Crossings</span> <input type="range" id="wCross" min="0" max="100" step="5" value="50" /><output id="wCrossOut">50%</output></label>
                 <label class="slider" data-i18n-attr="title:tip.gesture"><span data-i18n="label.gesture">Gestures</span> <input type="range" id="wGesture" min="0" max="100" step="5" value="70" /><output id="wGestureOut">70%</output></label>
-                <h3 data-i18n="h.worldCars">Cars</h3>
-                <label class="slider" data-i18n-attr="title:tip.carDensity"><span data-i18n="label.carDensity">Density</span> <input type="range" id="wCars" min="0" max="100" step="1" value="35" /><output id="wCarsOut">35%</output></label>
+</div></details>
+<details class="wsec"><summary data-i18n="h.worldCars">Cars</summary><div class="wbody">
+<label class="slider" data-i18n-attr="title:tip.carDensity"><span data-i18n="label.carDensity">Density</span> <input type="range" id="wCars" min="0" max="100" step="1" value="35" /><output id="wCarsOut">35%</output></label>
                 <label class="slider" data-i18n-attr="title:tip.carParked"><span data-i18n="label.carParked">Parked</span> <input type="range" id="wParked" min="0" max="100" step="5" value="40" /><output id="wParkedOut">40%</output></label>
                 <label class="slider" data-i18n-attr="title:tip.carQueue"><span data-i18n="label.carQueue">Queue at red</span> <input type="range" id="wQueue" min="1" max="8" step="1" value="3" /><output id="wQueueOut">3</output></label>
                 <div class="checks wrap">
@@ -203,8 +225,9 @@
                 </div>
                 <label class="inline" data-i18n-attr="title:tip.carPalette"><span data-i18n="label.carPalette">Colors</span> <select id="wPalette"><option value="realistic" selected data-i18n="palette.realistic">Realistic</option><option value="mono" data-i18n="palette.mono">Monochrome</option><option value="colorful" data-i18n="palette.colorful">Colorful</option></select></label>
                 <label class="inline" data-i18n-attr="title:tip.trafficSide"><span data-i18n="label.trafficSide">Traffic side</span> <select id="wSide"><option value="auto" selected data-i18n="side.auto">Auto (by country)</option><option value="left" data-i18n="side.left">Left</option><option value="right" data-i18n="side.right">Right</option></select></label>
-                <h3 data-i18n="h.worldTrees">Trees</h3>
-                <label class="slider" data-i18n-attr="title:tip.treeDensity"><span data-i18n="label.treeDensity">Density</span> <input type="range" id="wTreeDen" min="0" max="300" step="10" value="100" /><output id="wTreeDenOut">100%</output></label>
+</div></details>
+<details class="wsec"><summary data-i18n="h.worldTrees">Trees</summary><div class="wbody">
+<label class="slider" data-i18n-attr="title:tip.treeDensity"><span data-i18n="label.treeDensity">Density</span> <input type="range" id="wTreeDen" min="0" max="300" step="10" value="100" /><output id="wTreeDenOut">100%</output></label>
                 <label class="inline" data-i18n-attr="title:tip.treeType"><span data-i18n="label.treeType">Tree type</span> <select id="treeType"><option value="auto" selected data-i18n="treeType.auto">Auto (by climate)</option><option value="mixed" data-i18n="treeType.mixed">Mixed</option><option value="broadleaf" data-i18n="treeType.broadleaf">Broadleaf</option><option value="conifer" data-i18n="treeType.conifer">Conifer</option><option value="columnar" data-i18n="treeType.columnar">Tall &amp; narrow</option><option value="palm" data-i18n="treeType.palm">Palm</option><option value="umbrella" data-i18n="treeType.umbrella">Rain tree</option><option value="tropical" data-i18n="treeType.tropical">Tropical mix</option><option value="custom" data-i18n="treeType.custom">Custom</option></select></label>
                 <label class="slider" data-i18n-attr="title:tip.mixRound"><span data-i18n="label.mixRound">Broadleaf</span> <input type="range" id="wMixRound" min="0" max="100" step="5" value="60" /><output id="wMixRoundOut">60</output></label>
                 <label class="slider" data-i18n-attr="title:tip.mixColumnar"><span data-i18n="label.mixColumnar">Tall &amp; narrow</span> <input type="range" id="wMixColumnar" min="0" max="100" step="5" value="15" /><output id="wMixColumnarOut">15</output></label>
@@ -219,17 +242,21 @@
                   <label data-i18n-attr="title:tip.leafEdge"><span data-i18n="label.leafEdge">Leaf edge</span><select id="leafEdge"><option value="smooth" data-i18n="leaf.smooth">Smooth</option><option value="bumpy" selected data-i18n="leaf.bumpy">Bumpy</option><option value="fluffy" data-i18n="leaf.fluffy">Fluffy</option></select></label>
                   <label data-i18n-attr="title:tip.trees"><span data-i18n="label.treeStyle">Tree style</span><select id="treeStyle"><option value="tone" data-i18n="treeStyle.tone">Tone &amp; black</option><option value="tone-noline" data-i18n="treeStyle.toneNoline">Tone &amp; black (no outline)</option><option value="lines" data-i18n="treeStyle.lines">Lines</option></select></label>
                 </div>
-                <h3 data-i18n="h.worldStreet">Street details</h3>
-                <div class="checks wrap">
+</div></details>
+<details class="wsec"><summary data-i18n="h.worldStreet">Street details</summary><div class="wbody">
+<div class="checks wrap">
                   <label data-i18n-attr="title:tip.detailPoles"><input type="checkbox" id="wPoles" checked /> <span data-i18n="label.detailPoles">Poles</span></label>
                   <label data-i18n-attr="title:tip.detailSignals"><input type="checkbox" id="wSignals" checked /> <span data-i18n="label.detailSignals">Signals</span></label>
                   <label data-i18n-attr="title:tip.detailRails"><input type="checkbox" id="wRails" checked /> <span data-i18n="label.detailRails">Guard rails</span></label>
                   <label data-i18n-attr="title:tip.detailCrosswalks"><input type="checkbox" id="wCrosswalks" checked /> <span data-i18n="label.detailCrosswalks">Crosswalks</span></label>
                   <label data-i18n-attr="title:tip.detailTactile"><input type="checkbox" id="wTactile" checked /> <span data-i18n="label.detailTactile">Tactile paving</span></label>
                 </div>
-                <h3 data-i18n="h.worldLandmarks">Landmarks</h3>
-            <label class="checks" data-i18n-attr="title:tip.landmarks"><input type="checkbox" id="wLandmarks" checked /> <span data-i18n="label.landmarks">Hand-built landmark models</span></label>
-            <div class="row-btns">
+</div></details>
+<details class="wsec"><summary data-i18n="h.worldLandmarks">Landmarks</summary><div class="wbody">
+<label class="checks" data-i18n-attr="title:tip.landmarks"><input type="checkbox" id="wLandmarks" checked /> <span data-i18n="label.landmarks">Hand-built landmark models</span></label>
+</div></details>
+          </div>
+          <div class="row-btns">
                   <button class="btn small" id="wSeedBtn" data-i18n-attr="title:tip.worldSeed" data-i18n="btn.worldSeed">🎲 Shuffle crowd</button>
                   <button class="btn small" id="wResetBtn" data-i18n="btn.worldReset">Reset to defaults</button>
                 </div>

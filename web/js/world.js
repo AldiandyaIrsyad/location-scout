@@ -1,4 +1,4 @@
-// World settings panel: the controls for what is in the scene (people, cars, trees, street details).
+// World settings panel: the controls for what is in the scene (buildings, street furniture, people, cars, trees, street details).
 // The panel markup is in index.html; this module reads and writes it, and maps it onto the renderer
 // options (see WORLD_KEYS in render.js). Settings that differ from the defaults go into the share link
 // (`w=` in the URL hash) so the same crowd comes back when the link is opened.
@@ -15,11 +15,18 @@ const SLIDERS = [
   ['wGroup', 'groupSize', plain], ['wKids', 'kidsShare', pct], ['wCross', 'crossing', pct], ['wGesture', 'gesture', pct],
   ['wCars', 'carDensity', pct], ['wParked', 'carParked', pct], ['wQueue', 'carQueue', plain],
   ['wTreeDen', 'treeDensity', pct], ['wSizeMin', 'treeSizeMin', times], ['wSizeMax', 'treeSizeMax', times],
+  ['wBarrierScale', 'barrierScale', times],
 ];
-const SELECTS = [['wPalette', 'carPalette'], ['wSide', 'trafficSide']];
+const SELECTS = [
+  ['wPalette', 'carPalette'], ['wSide', 'trafficSide'],
+  ['wRoofStyle', 'roofStyle'], ['wRoofColor', 'roofColor'], ['wWallTone', 'wallTone'],
+  ['wBenchStyle', 'benchStyle'], ['wBenchColor', 'benchColor'], ['wBinStyle', 'binStyle'],
+];
 const CHECKS = [
   ['wPoles', 'detailPoles'], ['wSignals', 'detailSignals'], ['wRails', 'detailRails'],
   ['wCrosswalks', 'detailCrosswalks'], ['wTactile', 'detailTactile'], ['wLandmarks', 'landmarks'],
+  ['wBenches', 'furnBenches'], ['wBins', 'furnBins'], ['wStops', 'furnStops'],
+  ['wFences', 'barrierFences'], ['wWalls', 'barrierWalls'], ['wHedges', 'barrierHedges'],
 ];
 const MIX = [['wMixRound', 'round'], ['wMixColumnar', 'columnar'], ['wMixConifer', 'conifer'], ['wMixPalm', 'palm'], ['wMixUmbrella', 'umbrella']];
 
@@ -151,6 +158,17 @@ export function initWorld({ onChange } = {}) {
   const pop = $('worldPop'), btn = $('worldBtn');
   const setOpen = (open) => { pop.hidden = !open; btn.setAttribute('aria-expanded', String(open)); };
   btn.addEventListener('click', () => setOpen(pop.hidden));
+
+  // wide mode doubles the panel into two columns of sections; the choice is remembered
+  const wideBtn = $('worldWideBtn');
+  const setWide = (wide) => {
+    pop.classList.toggle('wide', wide);
+    wideBtn.setAttribute('aria-pressed', String(wide));
+    try { localStorage.setItem('panelscape.worldWide', wide ? '1' : '0'); } catch { /* storage may be blocked */ }
+  };
+  wideBtn.addEventListener('click', () => setWide(!pop.classList.contains('wide')));
+  try { if (localStorage.getItem('panelscape.worldWide') === '1') setWide(true); } catch { /* storage may be blocked */ }
+  $('worldCloseBtn').addEventListener('click', () => setOpen(false));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pop.hidden) setOpen(false); });
 
   return { read, write, toString, fromString, reset };

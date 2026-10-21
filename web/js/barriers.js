@@ -13,6 +13,13 @@ export const BARRIER_STYLES = {
   jersey_barrier: { form: 'solid', height: 0.8, thickness: 0.5, color: '#b9b9b6' },
 };
 
+// the world option (a panel switch) that shows or hides each kind
+export const BARRIER_GROUPS = {
+  fence: 'barrierFences', handrail: 'barrierFences', guard_rail: 'barrierFences',
+  wall: 'barrierWalls', city_wall: 'barrierWalls', retaining_wall: 'barrierWalls', jersey_barrier: 'barrierWalls',
+  hedge: 'barrierHedges',
+};
+
 /** Mapped height when usable (clamped so a typo cannot make a skyscraper), else the style's. */
 export function barrierHeight(barrier) {
   const style = BARRIER_STYLES[barrier.kind];

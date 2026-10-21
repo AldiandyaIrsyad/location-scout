@@ -19,6 +19,7 @@ import { composeContext } from './context.js';
 import { clipTriangle, clipSegment, drapeTriangle, groundGridHeight } from './surface-geometry.js';
 import { courtKind, courtLayout, courtSurface, courtToLocal, pitchFrame } from './courts.js';
 import { BARRIER_STYLES, barrierHeight, barrierRuns, fixtureFacing, roadIndex } from './barriers.js';
+import { paletteFor } from './palette.js';
 
 const DEG = Math.PI / 180;
 // One number per millimetre position, for Map keys on hot per-vertex paths (no string allocation).
@@ -99,20 +100,6 @@ const PAL = {
   person: '#c58f6a',
   car: ['#e9e9ee', '#c94a3b', '#3d5a80', '#f0c040', '#2f2f36', '#8fa3b0'],
 };
-
-const WALLS = {
-  house: ['#f3e2c7', '#e9d4b5', '#f5ebd9', '#dcc7a6'],
-  residential: ['#f3e2c7', '#e9d4b5', '#f5ebd9', '#dcc7a6'],
-  apartments: ['#ece4d6', '#e3d7c4', '#d9d4c8'],
-  commercial: ['#e7e2da', '#d6d0c5', '#efe8dd', '#cfc8ba'],
-  retail: ['#e7e2da', '#d6d0c5', '#efe8dd', '#cfc8ba'],
-  office: ['#d9dee3', '#cfd6dc', '#e4e8ec'],
-  industrial: ['#b7b4ac', '#a9a69d', '#c4c1b8'],
-  temple: ['#d9c48f', '#c7b07b'],
-  school: ['#f0dfb8', '#e8d3a3'],
-  default: ['#eee6d6', '#e3d6c0', '#d9cbb4', '#f3ede2', '#cfd7d8'],
-};
-const ROOFS = ['#8e5a48', '#6f6a68', '#5d6f8a', '#a4614a', '#5f5a55'];
 
 // Crown colours per season (instance colours are picked from these with jitter)
 const SEASON_CROWN = {
@@ -2101,7 +2088,8 @@ export class CityRenderer {
       // monuments, steps, sheds and landmark bases are solid: no window grid on their walls
       const solid = b.noWindows || NO_WINDOW_KINDS.has(b.kind);
       // A solid terrace or plinth is one stone surface: its top matches its walls instead of a random roof tile.
-      const roofPick = colArr(ROOFS[Math.floor(r() * ROOFS.length)]);
+      const roofColors = this._palette.roofs;
+      const roofPick = colArr(roofColors[Math.floor(r() * roofColors.length)]);
       const rc = solid ? wc.map((v) => clamp(v * 1.03, 0, 1)) : roofPick;
       const v0 = wallsB.p.length / 3;
       addWalls(wallsB, outer, holes, bottom, wallTop, wc);
@@ -2130,7 +2118,8 @@ export class CityRenderer {
   }
 
   _wallPick(b, r) {
-    const list = WALLS[b.kind] || WALLS.default;
+    const walls = this._palette.walls;
+    const list = walls[b.kind] || walls.default;
     return list[Math.floor(r() * list.length)];
   }
 
@@ -3546,6 +3535,7 @@ export class CityRenderer {
     }
     const context = this._context;
     this._landHalf = Math.max(city.size, this._surr?.contextSize || 0) / 2;
+    this._palette = paletteFor(city.center);
     if (this._surfaceCity !== context || this._surfaceElevation !== this._elev || this._surfaceTerrain !== this.options.terrain) {
       this._surfaces = makeSurfaces(context, this.options.terrain ? this._elev : null, (x, y) => this._terrainHeight(x, y));
       this._surfaceCity = context; this._surfaceElevation = this._elev; this._surfaceTerrain = this.options.terrain;

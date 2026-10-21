@@ -502,13 +502,20 @@ const COMPOSITE_FRAG = `
     return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
   }
 
-  // Silhouette / depth discontinuity, relative (scale invariant), 0..1
+  // Silhouette / depth discontinuity, relative (scale invariant), 0..1.
+  // Inverse depth is linear in screen space across a flat surface, so each opposite neighbour pair is
+  // tested for deviation from that line. A plain depth difference reads ground at a grazing angle
+  // (steep depth gradient near the horizon) as one solid silhouette.
   float depthEdge(vec2 uv, float r) {
-    float d0 = texture2D(tND, uv).a;
+    float i0 = 1.0 / max(texture2D(tND, uv).a, 1e-4);
     float e = 0.0;
-    for (int k = 0; k < 8; k++) {
-      float dn = texture2D(tND, uv + DIRS[k] * uTexel * r).a;
-      float rel = abs(dn - d0) / max(min(dn, d0), 1e-4);
+    for (int k = 0; k < 8; k += 2) {
+      // DIRS pairs: (0,1) (2,3) (4,7) (5,6) are opposite directions.
+      int a = k < 4 ? k : (k == 4 ? 4 : 5);
+      int b = k < 4 ? k + 1 : (k == 4 ? 7 : 6);
+      float ia = 1.0 / max(texture2D(tND, uv + DIRS[a] * uTexel * r).a, 1e-4);
+      float ib = 1.0 / max(texture2D(tND, uv + DIRS[b] * uTexel * r).a, 1e-4);
+      float rel = abs(ia + ib - 2.0 * i0) / max(max(ia, ib), i0);
       e = max(e, smoothstep(0.03, 0.07, rel));
     }
     return e;

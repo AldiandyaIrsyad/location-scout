@@ -1981,11 +1981,13 @@ export class CityRenderer {
       // colours: wall hue from the palette (or building:colour), slight brightness jitter
       const hex = b.color || this._wallPick(b, r);
       const mult = 0.95 + 0.1 * r();
-      const wc = colArr(hex).map((v) => clamp(v * mult, 0, 1));
-      const rc = colArr(ROOFS[Math.floor(r() * ROOFS.length)]);
-
+      // floor the brightness: a mapped "black" would otherwise render as a flat hole with no shading
+      const wc = colArr(hex).map((v) => clamp(v * mult, 0.12, 1));
       // monuments, steps, sheds and landmark bases are solid: no window grid on their walls
       const solid = b.noWindows || NO_WINDOW_KINDS.has(b.kind);
+      // A solid terrace or plinth is one stone surface: its top matches its walls instead of a random roof tile.
+      const roofPick = colArr(ROOFS[Math.floor(r() * ROOFS.length)]);
+      const rc = solid ? wc.map((v) => clamp(v * 1.03, 0, 1)) : roofPick;
       const v0 = wallsB.p.length / 3;
       addWalls(wallsB, outer, holes, bottom, wallTop, wc);
       if (solid) plain.push([v0, wallsB.p.length / 3]);

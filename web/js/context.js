@@ -41,6 +41,9 @@ export function composeContext(city, surroundings) {
     ...city, size: Math.max(city.size, sur.contextSize || 0),
     water: unique(city.water, sur.water), green: unique(city.green, sur.green), areas: unique(city.areas, sur.areas),
     props: unique(city.props, sur.props),
+    // The city has the detailed inside; the surroundings add only what lies outside it, like roads do.
+    barriers: [...(city.barriers || []), ...exterior(sur.barriers).map((b) => ({ ...b, context: true }))],
+    fixtures: city.fixtures || [],
     trees: unique(city.trees, sur.trees, p => `${Math.round(p[0] * 10)},${Math.round(p[1] * 10)}`),
     // Both representations stay in the surface graph so clipped inner roads use their actual profile.
     roads: [...(city.roads || []), ...(sur.roads || []), ...rails],

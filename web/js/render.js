@@ -18,6 +18,7 @@ import { viewDepthRange } from './camera-fit.js';
 import { composeContext } from './context.js';
 import { clipTriangle, clipSegment, drapeTriangle, groundGridHeight } from './surface-geometry.js';
 import { courtKind, courtLayout, courtSurface, courtToLocal, pitchFrame } from './courts.js';
+import { BARRIER_STYLES, barrierHeight, barrierRuns, fixtureFacing, roadIndex } from './barriers.js';
 
 const DEG = Math.PI / 180;
 // One number per millimetre position, for Map keys on hot per-vertex paths (no string allocation).
@@ -83,6 +84,14 @@ const PAL = {
   goal: '#f4f4f0',
   netPost: '#5a5f66',
   netTape: '#f4f4f0',
+  benchWood: '#9c6b3f',
+  benchFrame: '#4a4f55',
+  bin: '#4c6a58',
+  binLid: '#3b4a41',
+  stopPole: '#6a7077',
+  stopSign: '#2d6cb5',
+  shelterRoof: '#8b9299',
+  shelterGlass: '#cfe0ea',
   pole: '#5a4a3c',
   signal: '#3d3d3d',
   trunk: '#7b5a3e',
@@ -1946,6 +1955,100 @@ export class CityRenderer {
     });
   }
 
+  // ----- barriers and street furniture ---------------------------------------
+
+  /**
+   * Fences, walls and hedges along mapped lines. A fence is posts and two rails (so it can be seen
+   * through), the rest are solid. Every barrier has an opening wherever a road crosses it. Barriers
+   * outside the detailed square go to the surroundings group.
+   */
+  _buildBarriers(barriers, roads) {
+    const batches = [new Batch(), new Batch()]; // detailed square, surroundings
+    const half = this._landHalf;
+    const segmentQuad = (a, b, t, extend = 0) => {
+      const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len, nx = -uy * t, ny = ux * t;
+      const ax = a[0] - ux * extend, ay = a[1] - uy * extend, bx = b[0] + ux * extend, by = b[1] + uy * extend;
+      return [[ax + nx, ay + ny], [bx + nx, by + ny], [bx - nx, by - ny], [ax - nx, ay - ny]];
+    };
+    for (const bar of barriers || []) {
+      const style = BARRIER_STYLES[bar.kind];
+      if (!style || !bar.points || bar.points.length < 2) continue;
+      const H = barrierHeight(bar), col = colArr(style.color);
+      const batch = batches[bar.context ? 1 : 0];
+      // the ground only exists out to `half`: trim each run to it
+      const inside = ([x, y]) => Math.abs(x) <= half && Math.abs(y) <= half;
+      const trimmed = barrierRuns(bar.points, roads.insideRoad).flatMap((run) => {
+        const parts = [];
+        let part = [];
+        for (const p of run) {
+          if (inside(p)) part.push(p);
+          else { if (part.length > 1) parts.push(part); part = []; }
+        }
+        if (part.length > 1) parts.push(part);
+        return parts;
+      });
+      for (const run of trimmed) {
+        if (style.form === 'solid') {
+          for (let i = 1; i < run.length; i++) this._prism(batch, segmentQuad(run[i - 1], run[i], style.thickness / 2, style.thickness / 4), -0.3, H, col);
+          continue;
+        }
+        let sincePost = Infinity;
+        for (let i = 0; i < run.length; i++) {
+          if (i > 0) {
+            this._prism(batch, segmentQuad(run[i - 1], run[i], 0.025), H - 0.08, H, col);
+            if (bar.kind !== 'guard_rail') this._prism(batch, segmentQuad(run[i - 1], run[i], 0.025), H * 0.2, H * 0.2 + 0.07, col);
+            sincePost += Math.hypot(run[i][0] - run[i - 1][0], run[i][1] - run[i - 1][1]);
+          }
+          if (sincePost >= 3 || i === 0 || i === run.length - 1) {
+            const [x, y] = run[i];
+            this._prism(batch, [[x - 0.04, y - 0.04], [x + 0.04, y - 0.04], [x + 0.04, y + 0.04], [x - 0.04, y + 0.04]], -0.2, H, col);
+            sincePost = 0;
+          }
+        }
+      }
+    }
+    batches.forEach((batch, i) => {
+      const geometry = batch.toGeometry();
+      if (!geometry) return;
+      const mesh = this._addMesh(geometry, 'detail', i ? 'surroundings' : 'details', { name: i ? 'context-barriers' : 'barriers', cast: !i });
+      if (mesh && i) mesh.userData.surroundings = true;
+    });
+  }
+
+  /** Benches, waste baskets and bus stops from mapped nodes, facing the nearest road unless tagged. */
+  _buildFixtures(fixtures, roads) {
+    const batch = new Batch();
+    const half = this._landHalf;
+    for (const f of fixtures || []) {
+      const [x, y] = f.position || [];
+      if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > half || Math.abs(y) > half) continue;
+      const yaw = fixtureFacing(f, roads), c = Math.cos(yaw), s = Math.sin(yaw);
+      // u runs the way the fixture faces, v across it (to its left)
+      const box = (u0, u1, v0, v1, h0, h1, hex) => this._prism(
+        batch, [[u0, v0], [u1, v0], [u1, v1], [u0, v1]].map(([u, v]) => [x + u * c - v * s, y + u * s + v * c]), h0, h1, colArr(hex));
+      if (f.kind === 'bench') {
+        box(-0.22, 0.22, -0.8, 0.8, 0.42, 0.47, PAL.benchWood); // seat
+        box(-0.26, -0.2, -0.8, 0.8, 0.47, 0.9, PAL.benchWood); // back
+        box(-0.2, 0.2, -0.72, -0.64, 0, 0.42, PAL.benchFrame);
+        box(-0.2, 0.2, 0.64, 0.72, 0, 0.42, PAL.benchFrame);
+      } else if (f.kind === 'waste_basket') {
+        box(-0.2, 0.2, -0.2, 0.2, 0, 0.8, PAL.bin);
+        box(-0.23, 0.23, -0.23, 0.23, 0.8, 0.86, PAL.binLid);
+      } else if (f.kind === 'bus_stop') {
+        box(-0.05, 0.05, -0.05, 0.05, 0, 2.8, PAL.stopPole);
+        box(-0.2, 0.2, -0.02, 0.02, 2.2, 2.75, PAL.stopSign); // the sign plate faces along the road
+        if (f.shelter) {
+          box(-0.9, 0.9, -1.7, 1.7, 2.3, 2.42, PAL.shelterRoof);
+          for (const [u, v] of [[-0.85, -1.65], [-0.85, 1.65], [0.85, -1.65], [0.85, 1.65]]) box(u - 0.04, u + 0.04, v - 0.04, v + 0.04, 0, 2.3, PAL.stopPole);
+          box(-0.9, -0.84, -1.7, 1.7, 0.3, 2.3, PAL.shelterGlass); // back panel, away from the road
+        }
+      }
+    }
+    const geometry = batch.toGeometry();
+    if (geometry) this._addMesh(geometry, 'detail', 'details', { name: 'street-fixtures' });
+  }
+
   // ----- buildings ------------------------------------------------------------
 
   /**
@@ -3510,6 +3613,9 @@ export class CityRenderer {
     }
 
     this._buildMappedObjects(context.props, lm.replacements);
+    const roadIdx = roadIndex(context.roads);
+    this._buildBarriers(context.barriers, roadIdx);
+    this._buildFixtures(context.fixtures, roadIdx);
     this._treeLOD = [];
     if (opt.trees) {
       const near = [], far = [];

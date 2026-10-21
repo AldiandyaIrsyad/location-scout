@@ -70,6 +70,8 @@ type collected struct {
 	areas    []Area
 	trees    []geo.Point
 	props    []MappedObject
+	barriers []Barrier
+	fixtures []Fixture
 	areaSeen map[string]bool
 	propSeen map[string]bool
 }
@@ -111,6 +113,8 @@ func Parse(raw []byte, lat, lon float64, size int, seed int) (*CityData, error) 
 		Areas:     c.areas,
 		Trees:     trees,
 		Props:     c.props,
+		Barriers:  c.barriers,
+		Fixtures:  c.fixtures,
 	}
 	city.Viewpoints = FindViewpoints(city)
 	city.Stats = Stats{
@@ -158,6 +162,7 @@ func ParseSurroundings(raw []byte, lat, lon float64, size, farSize int) (*Surrou
 	green := contextAreas(c.green, contextBox)
 	areas := contextAreas(c.areas, contextBox)
 	props := contextProps(c.props, contextBox)
+	barriers := contextBarriers(c.barriers, contextBox)
 	trees := contextTrees(c.trees, contextBox, 4000)
 	return &Surroundings{
 		Buildings:   buildings,
@@ -168,6 +173,7 @@ func ParseSurroundings(raw []byte, lat, lon float64, size, farSize int) (*Surrou
 		Areas:       areas,
 		Trees:       trees,
 		Props:       props,
+		Barriers:    barriers,
 		ContextSize: contextSize,
 	}, nil
 }
@@ -178,7 +184,8 @@ func collect(elements []osmElement, lat0, lon0 float64, b box) *collected {
 		outlines: []rawBuilding{}, parts: []rawBuilding{},
 		roads: []Road{}, railways: []Railway{},
 		water: []Area{}, green: []Area{}, areas: []Area{}, trees: []geo.Point{},
-		props: []MappedObject{}, areaSeen: map[string]bool{}, propSeen: map[string]bool{},
+		props: []MappedObject{}, barriers: []Barrier{}, fixtures: []Fixture{},
+		areaSeen: map[string]bool{}, propSeen: map[string]bool{},
 	}
 	toXY := func(g []osmLatLon) []geo.Point {
 		pts := make([]geo.Point, len(g))
@@ -199,6 +206,9 @@ func collect(elements []osmElement, lat0, lon0 float64, b box) *collected {
 			if propKind(tags) != "" && b.contains(p) {
 				addProp(out, mappedObject("n"+strconv.FormatInt(el.ID, 10), tags, p, nil))
 			}
+			if kind := fixtureKind(tags); kind != "" && b.contains(p) {
+				out.fixtures = append(out.fixtures, newFixture("n"+strconv.FormatInt(el.ID, 10), kind, tags, p))
+			}
 			continue
 		}
 
@@ -208,11 +218,24 @@ func collect(elements []osmElement, lat0, lon0 float64, b box) *collected {
 			}
 			closed := isClosedGeom(el.Geometry)
 			cat := categorizeWay(tags, closed)
-			if cat == "" && propKind(tags) == "" {
-				continue
-			}
 			pts := toXY(el.Geometry)
 			id := "w" + strconv.FormatInt(el.ID, 10)
+			if cat == "" && propKind(tags) == "" {
+				// A barrier line (a closed ring is just a line that returns to its start).
+				if kind := barrierKind(tags); kind != "" {
+					if line := cleanLine(pts); line != nil && intersectsBox(line, false, b) {
+						pieces := clipPolyline(line, b)
+						for k, piece := range pieces {
+							pid := id
+							if len(pieces) > 1 {
+								pid = fmt.Sprintf("%s_%d", id, k)
+							}
+							out.barriers = append(out.barriers, newBarrier(pid, kind, tags, piece))
+						}
+					}
+				}
+				continue
+			}
 			if propKind(tags) != "" && intersectsBox(pts, closed, b) {
 				var outer []geo.Point
 				if closed {

@@ -26,6 +26,7 @@ func cityQuery(b geo.BBox) string {
 	rail := alt(railKinds)
 	landmarkKinds := alt([]string{"memorial", "monument"})
 	artworkKinds := alt([]string{"statue", "sculpture"})
+	barriers := alt(barrierKinds)
 	return fmt.Sprintf(`[out:json][timeout:60];
 (
   way["building"]%[1]s;
@@ -59,8 +60,11 @@ func cityQuery(b geo.BBox) string {
   node["amenity"="fountain"]%[1]s;
   way["amenity"="fountain"]%[1]s;
   relation["amenity"="fountain"]%[1]s;
+  way["barrier"~"%[8]s"]%[1]s;
+  node["amenity"~"^(bench|waste_basket)$"]%[1]s;
+  node["highway"="bus_stop"]%[1]s;
 );
-out geom;`, bb, rail, leisure, landuse, natural, landmarkKinds, artworkKinds)
+out geom;`, bb, rail, leisure, landuse, natural, landmarkKinds, artworkKinds, barriers)
 }
 
 // surroundingsQuery fetches buildings across the requested far box and the other context
@@ -74,6 +78,7 @@ func surroundingsQuery(far, context geo.BBox) string {
 	natural := alt(greenNatural)
 	landmarkKinds := alt([]string{"memorial", "monument"})
 	artworkKinds := alt([]string{"statue", "sculpture"})
+	barriers := alt(barrierKinds)
 	return fmt.Sprintf(`[out:json][timeout:60];
 (
   way["building"]%[1]s;
@@ -107,6 +112,7 @@ func surroundingsQuery(far, context geo.BBox) string {
   node["amenity"="fountain"]%[2]s;
   way["amenity"="fountain"]%[2]s;
   relation["amenity"="fountain"]%[2]s;
+  way["barrier"~"%[9]s"]%[2]s;
 );
-out geom;`, farBB, contextBB, rail, leisure, landuse, natural, landmarkKinds, artworkKinds)
+out geom;`, farBB, contextBB, rail, leisure, landuse, natural, landmarkKinds, artworkKinds, barriers)
 }

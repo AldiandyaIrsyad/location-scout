@@ -35,6 +35,8 @@ type CityData struct {
 	Areas      []Area         `json:"areas"`
 	Trees      []geo.Point    `json:"trees"`
 	Props      []MappedObject `json:"props"`
+	Barriers   []Barrier      `json:"barriers"`
+	Fixtures   []Fixture      `json:"fixtures"`
 	Viewpoints []Viewpoint    `json:"viewpoints"`
 	Stats      Stats          `json:"stats"`
 }
@@ -63,6 +65,25 @@ type MappedObject struct {
 	Guessed  bool        `json:"guessed"`
 	Outer    []geo.Point `json:"outer,omitempty"`
 	Material string      `json:"material,omitempty"`
+}
+
+// Barrier is a fence, wall, hedge or similar line feature, clipped to the fetched area.
+// Height is the mapped height in metres, or 0 when untagged (the renderer picks one per kind).
+type Barrier struct {
+	ID     string      `json:"id"`
+	Points []geo.Point `json:"points"`
+	Kind   string      `json:"kind"`
+	Height float64     `json:"height,omitempty"`
+}
+
+// Fixture is a small piece of street furniture mapped as a point: a bench, waste basket or bus stop.
+// Direction is the mapped facing in compass degrees (0 = north), absent when untagged.
+type Fixture struct {
+	ID        string    `json:"id"`
+	Kind      string    `json:"kind"`
+	Position  geo.Point `json:"position"`
+	Direction *float64  `json:"direction,omitempty"`
+	Shelter   bool      `json:"shelter,omitempty"`
 }
 
 // Building is an extruded footprint.
@@ -133,5 +154,6 @@ type Surroundings struct {
 	Areas       []Area         `json:"areas"`
 	Trees       []geo.Point    `json:"trees"`
 	Props       []MappedObject `json:"props"`
+	Barriers    []Barrier      `json:"barriers"`
 	ContextSize int            `json:"contextSize"`
 }

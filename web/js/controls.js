@@ -4,12 +4,12 @@
 import * as THREE from 'three';
 
 const HINTS = {
-  standard: 'Left drag: orbit · Right drag: pan · Wheel: zoom · Click: drop a pin · WASD: move',
-  middle: 'Middle drag: orbit · Shift+middle: pan · Wheel: zoom · Click: drop a pin',
-  alt: 'Alt+left: orbit · Alt+middle: pan · Alt+right: zoom · Click: drop a pin',
-  pen: 'Drag: orbit · Ctrl+drag: pan · Shift+drag: zoom · Tap: drop a pin',
+  standard: 'Left drag: look around · Ctrl+drag: orbit · Right drag: pan · Wheel: zoom · Click: drop a pin · WASD: move (Shift: faster)',
+  middle: 'Middle drag: look around · Shift+middle: pan · Wheel: zoom · Click: drop a pin',
+  alt: 'Alt+left: look around · Alt+middle: pan · Alt+right: zoom · Click: drop a pin',
+  pen: 'Drag: look around · Ctrl+drag: pan · Shift+drag: zoom · Tap: drop a pin',
   look: 'Drag: look around · Wheel / W S: walk · A D: sidestep · Click: drop a pin',
-  trackpad: 'Two-finger drag: pan · Pinch: zoom · Drag: orbit · Click: drop a pin',
+  trackpad: 'Two-finger drag: pan · Pinch: zoom · Drag: look around · Ctrl+drag: orbit · Click: drop a pin',
 };
 
 export class CameraRig {
@@ -28,6 +28,7 @@ export class CameraRig {
     this._drag = null;
     this._pointers = new Map();
     this._keys = new Set();
+    this._shift = false;
     this._bind();
   }
 
@@ -78,9 +79,10 @@ export class CameraRig {
   }
 
   // --- operations -------------------------------------------------------
-  orbit(dx, dy) {
+  /** Rotate the view. By default the eye stays put and the view turns; `aroundTarget` orbits the target instead. */
+  orbit(dx, dy, aroundTarget = false) {
     const k = 0.005;
-    if (this.mode === 'look') {
+    if (!aroundTarget) {
       // rotate around the eye
       const eye = this.eye();
       this.yaw += dx * k * 0.6;
@@ -116,10 +118,11 @@ export class CameraRig {
     this._changed();
   }
 
-  walk(forwardM, rightM, upM = 0) {
+  /** `alongView` moves forward/back along the look direction (pitch included) instead of the ground plane. */
+  walk(forwardM, rightM, upM = 0, alongView = false) {
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, Math.sin(this.yaw));
-    const fwdFlat = new THREE.Vector3(Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    this.target.addScaledVector(fwdFlat, forwardM).addScaledVector(right, rightM);
+    const fwd = alongView ? this.forward() : new THREE.Vector3(Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+    this.target.addScaledVector(fwd, forwardM).addScaledVector(right, rightM);
     this.target.y += upM;
     this._changed();
   }
@@ -134,8 +137,8 @@ export class CameraRig {
     window.addEventListener('pointercancel', (e) => this._up(e));
     dom.addEventListener('wheel', (e) => this._wheel(e), { passive: false });
     window.addEventListener('keydown', (e) => this._keydown(e));
-    window.addEventListener('keyup', (e) => this._keys.delete(e.code));
-    window.addEventListener('blur', () => this._keys.clear());
+    window.addEventListener('keyup', (e) => { this._keys.delete(e.code); this._shift = e.shiftKey; });
+    window.addEventListener('blur', () => { this._keys.clear(); this._shift = false; });
     let last = performance.now();
     const tick = (now) => {
       const dt = Math.min(0.1, (now - last) / 1000);
@@ -152,7 +155,7 @@ export class CameraRig {
     switch (this.mode) {
       case 'standard':
       case 'look':
-        if (b === 0) return e.shiftKey ? 'pan' : 'orbit';
+        if (b === 0) return e.shiftKey ? 'pan' : e.ctrlKey ? 'orbitTarget' : 'orbit';
         return 'pan';
       case 'middle':
         if (b === 1) return e.shiftKey ? 'pan' : 'orbit';
@@ -166,7 +169,7 @@ export class CameraRig {
         if (e.shiftKey) return 'zoom';
         return 'orbit';
       case 'trackpad':
-        return b === 0 ? (e.shiftKey ? 'pan' : 'orbit') : 'pan';
+        return b === 0 ? (e.shiftKey ? 'pan' : e.ctrlKey ? 'orbitTarget' : 'orbit') : 'pan';
     }
     return 'orbit';
   }
@@ -205,6 +208,7 @@ export class CameraRig {
     if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) > 4) d.moved = true;
     if (!d.moved) return;
     if (d.action === 'orbit') this.orbit(dx, dy);
+    else if (d.action === 'orbitTarget') this.orbit(dx, dy, true);
     else if (d.action === 'pan') this.pan(dx, dy);
     else if (d.action === 'zoom') this.zoom(dy * 4);
   }
@@ -234,6 +238,7 @@ export class CameraRig {
   }
 
   _keydown(e) {
+    this._shift = e.shiftKey; // held-key speed boost; Shift itself is never in `_keys`
     const tag = (e.target && e.target.tagName) || '';
     if (/INPUT|SELECT|TEXTAREA/.test(tag) && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -249,11 +254,11 @@ export class CameraRig {
   _keyMove(dt) {
     if (!this._keys.size) return;
     const eyeH = Math.max(2, this.eye().y - this.groundAt(this.eye().x, this.eye().z));
-    const speed = THREE.MathUtils.clamp(eyeH * 1.2, 4, 300) * dt * (this._keys.has('ShiftLeft') ? 3 : 1);
+    const speed = THREE.MathUtils.clamp(eyeH * 1.2, 4, 300) * dt * (this._shift ? 3 : 1);
     const k = this._keys;
     const f = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
     const r = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
     const u = (k.has('KeyE') ? 1 : 0) - (k.has('KeyQ') ? 1 : 0);
-    if (f || r || u) this.walk(f * speed, r * speed, u * speed);
+    if (f || r || u) this.walk(f * speed, r * speed, u * speed, true);
   }
 }

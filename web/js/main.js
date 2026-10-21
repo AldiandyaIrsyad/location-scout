@@ -5,10 +5,11 @@ import { CameraRig } from './controls.js';
 import { MiniMap } from './map.js';
 import { toLocal, toLatLon } from './geo.js';
 import { fetchCity, fetchSurroundings, findViewpoints } from './osm.js';
-import { fetchElevation } from './elevation.js';
+import { fetchElevation, sampleHeight } from './elevation.js';
 import { fitBounds } from './camera-fit.js';
 import { inArea } from './surfaces.js';
-import { subjectViewpoint } from './street-view.js';
+import { subjectViewpoint, refitViewpoint } from './street-view.js';
+import { landmarksFor } from './landmarks.js';
 import { parseLocation, parseKmlFile } from './coords.js';
 import { loadPlaces, searchPlaces } from './places.js';
 import { FORMATS, makeFile, suggestedName, prepareSave, commitSave, chooseFolder, currentFolder, supportsFolders } from './save.js';
@@ -39,6 +40,7 @@ const state = {
   buildToken: 0,
   abort: null,
   pendingView: null, // camera pose from hash / Google Earth link applied after build
+  awaitingStreet: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -88,7 +90,13 @@ function resize() {
   const r = canvas.parentElement.getBoundingClientRect();
   renderer.resize(Math.max(1, r.width), Math.max(1, r.height));
   const preset = $('cameraSelect')?.value;
-  if (state.city && presetPose === poseKey() && ['overview', 'top', 'wide'].includes(preset)) applyPreset(preset);
+  if (state.city && presetPose === poseKey() && (['overview', 'top', 'wide'].includes(preset) || preset?.startsWith('vp'))) {
+    if (preset?.startsWith('vp')) {
+      const index = Number(preset.slice(2)), vp = state.viewpoints[index];
+      if (vp?.kind === 'street-subject') state.viewpoints[index] = refitViewpoint(state.city, vp, streetFrameOptions(state.city));
+    }
+    applyPreset(preset, { fitLens: state.far === 0 || !!state.surroundings });
+  }
   renderer.applyCameraPose(rig.getPose());
   updateMapCamera();
   requestRender();
@@ -212,14 +220,7 @@ async function build() {
     await nextFrame();
     // Viewpoints first, so the renderer keeps their camera spots free of poles, trees, people and cars.
     state.viewpoints = safeViewpoints(city);
-    // The camera spot plus the first 15 m of its line of sight, sampled every 2.5 m.
-    city.keepClear = state.viewpoints.flatMap((vp) => {
-      const [px, py] = vp.position, [tx, ty] = vp.target;
-      const len = Math.hypot(tx - px, ty - py) || 1;
-      const pts = [];
-      for (let d = 0; d <= Math.min(15, len); d += 2.5) pts.push([px + ((tx - px) * d) / len, py + ((ty - py) * d) / len]);
-      return pts;
-    });
+    city.keepClear = keepClearFor(state.viewpoints);
     renderer.setCity(city, elevation, null);
     fillCameraSelect();
     applyInitialView();
@@ -236,8 +237,25 @@ async function build() {
       try {
         const sur = await fetchSurroundings({ lat, lon, size, farSize: far * 1000, signal: abort.signal, onProgress: (txt) => token === state.buildToken && setStatusT('status.surProgress', { name: state.name || t('status.area'), secs, text: txt }) });
         if (token !== state.buildToken) return;
+        const followStreet = presetPose === poseKey() && (
+          ($('cameraSelect').value === 'vp0' && state.viewpoints[0]?.kind === 'street-subject') ||
+          (state.awaitingStreet && $('cameraSelect').value === 'overview')
+        );
+        const selectedView = state.viewpoints[Number($('cameraSelect').value.slice(2))];
         state.surroundings = sur;
+        state.viewpoints = safeViewpoints(city);
+        city.keepClear = keepClearFor(state.viewpoints);
         renderer.setCity(city, elevation, sur);
+        fillCameraSelect();
+        if (followStreet && state.viewpoints[0]?.kind === 'street-subject') {
+          $('cameraSelect').value = 'vp0';
+          applyPreset('vp0');
+        }
+        else if (selectedView && JSON.stringify(selectedView) !== JSON.stringify(state.viewpoints[Number($('cameraSelect').value.slice(2))])) {
+          $('cameraSelect').value = 'free';
+          presetPose = null;
+        }
+        state.awaitingStreet = false;
         renderer.applyCameraPose(rig.getPose());
         showStats();
         requestRender();
@@ -245,7 +263,10 @@ async function build() {
       } catch (err) {
         if (err.name !== 'AbortError') {
           console.warn('Surroundings failed', err);
-          if (token === state.buildToken) setStatusT('status.surFailed', { name: state.name || t('status.area'), secs });
+          if (token === state.buildToken) {
+            if ($('cameraSelect').value === 'vp0' && state.viewpoints[0]?.kind === 'street-subject' && presetPose === poseKey()) applyPreset('vp0');
+            setStatusT('status.surFailed', { name: state.name || t('status.area'), secs });
+          }
         }
       }
     }
@@ -266,6 +287,17 @@ const nextFrame = () => new Promise((r) => {
   requestAnimationFrame(done);
 });
 
+// The eye and its first 15 m of sightline must stay free of generated props.
+function keepClearFor(viewpoints) {
+  return viewpoints.flatMap((vp) => {
+    const [px, py] = vp.position, [tx, ty] = vp.target;
+    const len = Math.hypot(tx - px, ty - py) || 1;
+    const pts = [];
+    for (let d = 0; d <= Math.min(15, len); d += 2.5) pts.push([px + ((tx - px) * d) / len, py + ((ty - py) * d) / len]);
+    return pts;
+  });
+}
+
 function safeViewpoints(city) {
   let list = [];
   try {
@@ -276,10 +308,23 @@ function safeViewpoints(city) {
   } catch (err) { console.warn(err); }
   // First entry: the place itself seen from the street, which is what a background reference needs.
   try {
-    const subject = subjectViewpoint(city);
+    const subject = subjectViewpoint(city, {
+      ...streetFrameOptions(city),
+      contextRoads: state.surroundings?.roads || [],
+      obstacleBuildings: state.surroundings?.buildings || [],
+      maxRoadDistance: state.surroundings ? state.far * 450 : city.size,
+    });
     if (subject) list.unshift(subject);
   } catch (err) { console.warn(err); }
   return list;
+}
+
+function streetFrameOptions(city) {
+  return {
+    fov: renderer.camera.fov, aspect: renderer.camera.aspect,
+    subject: landmarksFor(city).subjects?.find(s => Math.hypot(...s.center) < 60),
+    groundAt: (x, y) => $('optTerrain').checked ? sampleHeight(state.elevation, x, y) : 0,
+  };
 }
 
 $('loadRetryBtn').addEventListener('click', () => build());
@@ -342,7 +387,7 @@ function fillCameraSelect() {
 
 function groundAt(x, y) { return state.city ? renderer.surfaceHeight(x, y) : 0; }
 
-function applyPreset(value) {
+function applyPreset(value, { fitLens = true } = {}) {
   const size = state.size;
   if (['overview', 'top', 'wide'].includes(value)) {
     const bounds = renderer.nearBounds();
@@ -360,6 +405,14 @@ function applyPreset(value) {
   else if (value.startsWith('vp')) {
     const vp = state.viewpoints[Number(value.slice(2))];
     if (!vp) return;
+    // Keep the eye on the mapped street. A tall subject may require a wider lens
+    // until its more distant mapped approaches finish loading.
+    if (fitLens && vp.kind === 'street-subject' && !vp.frame?.fits && vp.frame?.requiredLens < state.lens) {
+      state.lens = Math.max(14, Math.floor(vp.frame.requiredLens));
+      renderer.setLens(state.lens);
+      $('lens').value = String(state.lens);
+      $('lensOut').textContent = `${state.lens}mm`;
+    }
     const [px, py] = vp.position, [tx, ty] = vp.target;
     const eyeY = groundAt(px, py) + (vp.eyeHeight ?? 1.6);
     const targetY = groundAt(tx, ty) + (vp.lookHeight ?? (vp.kind === 'street-down' ? 0 : vp.kind === 'street-low' ? 6 : 2.5));
@@ -368,12 +421,14 @@ function applyPreset(value) {
     let pitch = Math.atan2(targetY - eyeY, Math.max(1, dist));
     if (vp.kind === 'street-low') pitch = Math.max(pitch, 0.18);
     rig.setPose({ position: new THREE.Vector3(px, eyeY, -py), yaw, pitch, distance: Math.max(20, dist) });
+    presetPose = poseKey();
   }
 }
 
 function applyInitialView() {
   const v = state.pendingView;
   state.pendingView = null;
+  state.awaitingStreet = false;
   if (v?.kind === 'pose') {
     rig.setPose({ position: new THREE.Vector3(v.x, v.y, v.z), yaw: v.yaw, pitch: v.pitch, distance: v.dist });
     $('cameraSelect').value = 'free';
@@ -388,8 +443,9 @@ function applyInitialView() {
     // Without a usable street (or in clay style) fall back to the overview of the whole area.
     const street = state.viewpoints.findIndex((vp) => vp.kind === 'street-subject');
     const start = street >= 0 && state.style !== 'clay' ? `vp${street}` : 'overview';
+    state.awaitingStreet = street < 0 && state.far > 0 && state.style !== 'clay';
     $('cameraSelect').value = start;
-    applyPreset(start);
+    applyPreset(start, { fitLens: state.far === 0 });
   }
 }
 
@@ -493,7 +549,14 @@ function readOptions() {
 // World settings panel (people, cars, trees, street details); kept in the share link
 const world = initWorld({ onChange: () => { applyOptions(); scheduleHash(); } });
 function applyOptions() {
+  const preset = $('cameraSelect').value;
+  const follow = state.city && presetPose === poseKey();
   renderer.setOptions(readOptions());
+  if (follow && preset.startsWith('vp')) {
+    const index = Number(preset.slice(2)), vp = state.viewpoints[index];
+    if (vp?.kind === 'street-subject') state.viewpoints[index] = refitViewpoint(state.city, vp, streetFrameOptions(state.city));
+  }
+  if (follow) applyPreset(preset, { fitLens: state.far === 0 || !!state.surroundings });
   renderer.applyCameraPose(rig.getPose());
   requestRender();
 }
@@ -589,8 +652,8 @@ bindRange('blackRange', pct, updTone);
 for (const id of ['tonePattern', 'toneGray', 'whiteLines']) $(id).addEventListener('change', updTone);
 $('toneSeed').addEventListener('click', () => { toneSeed++; updTone(); });
 bindRange('lens', (v) => `${v}mm`, (v) => { state.lens = v; renderer.setLens(v); renderer.applyCameraPose(rig.getPose()); updateMapCamera(); requestRender(); scheduleHash(); });
-$('cameraSelect').addEventListener('change', (e) => { if (e.target.value !== 'free') applyPreset(e.target.value); });
-canvas.addEventListener('pointerdown', () => { if ($('cameraSelect').value !== 'free') $('cameraSelect').value = 'free'; });
+$('cameraSelect').addEventListener('change', (e) => { state.awaitingStreet = false; if (e.target.value !== 'free') applyPreset(e.target.value); });
+canvas.addEventListener('pointerdown', () => { state.awaitingStreet = false; if ($('cameraSelect').value !== 'free') $('cameraSelect').value = 'free'; });
 $('recenterBtn').addEventListener('click', () => {
   const p = renderer.pickGround(0, 0) || [rig.target.x, -rig.target.z];
   const pose = rig.getPose();

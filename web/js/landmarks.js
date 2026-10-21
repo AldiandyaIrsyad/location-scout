@@ -274,12 +274,13 @@ function orientedBox(ring) {
 }
 
 export const LANDMARKS = [
-  { id: 'eiffel', name: 'Eiffel Tower', lat: 48.85837, lon: 2.29448, radius: 110, pick: tall, fit: towerFit(Math.PI / 4), build: buildEiffel },
+  { id: 'eiffel', name: 'Eiffel Tower', lat: 48.85837, lon: 2.29448, radius: 110, cameraHeight: 330, cameraRadius: 89, pick: tall, fit: towerFit(Math.PI / 4), build: buildEiffel },
   // plainWalls: radius in metres around the landmark where the map buildings left standing (terraces, steps,
   // entrance halls) get no window grid
-  { id: 'monas', name: 'Monas', lat: -6.1754, lon: 106.8272, radius: 60, plainWalls: 100, pick: tall, fit: towerFit(0), build: buildMonas },
+  { id: 'monas', name: 'Monas', lat: -6.1754, lon: 106.8272, radius: 60, cameraHeight: 132, cameraRadius: 60, plainWalls: 100, pick: tall, fit: towerFit(0), build: buildMonas },
   {
     id: 'louvre-pyramid', name: 'Louvre Pyramid', lat: 48.8610, lon: 2.3359, radius: 60,
+    cameraHeight: 21.64,
     // the map has it as a 15-30 m pyramid roof on a ground-level footprint about 35 m across
     pick: (b) => b.roofShape === 'pyramidal' && (b.height || 0) >= 15 && (b.height || 0) <= 30 && !(b.minHeight > 0),
     fit: (pieces) => {
@@ -331,6 +332,12 @@ export function landmarksFor(city, enabled = true) {
   if (!found.length) return { buildings: list, draw: null };
   return {
     replacements: found.map(({ cx, cy }) => [cx, cy]),
+    // Frame the complete replacement model, including the ground below elevated
+    // map parts. A tower's upper platform alone is an invalid camera subject.
+    subjects: found.map(({ lm, cx, cy, hx, hy }) => ({
+      center: [cx, cy], baseHeight: 0, height: lm.cameraHeight,
+      radius: lm.cameraRadius || Math.hypot(hx || 0, hy || 0),
+    })),
     buildings: list.filter((b) => !drop.has(b)).map((b) => (plain && plain.has(b) ? { ...b, noWindows: true } : b)),
     draw(batch, groundHeight) {
       for (const { lm, cx, cy, yaw, hx, hy } of found) {

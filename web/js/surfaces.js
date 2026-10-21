@@ -15,6 +15,17 @@ function boundsOf(area) {
   return bounds;
 }
 
+function distanceToRing(ring, x, y) {
+  let d = Infinity;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [ax, ay] = ring[j], [bx, by] = ring[i];
+    const dx = bx - ax, dy = by - ay;
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)));
+    d = Math.min(d, Math.hypot(x - ax - dx * t, y - ay - dy * t));
+  }
+  return d;
+}
+
 export function inArea(x, y, area) {
   if (!area.outer?.length) return false;
   const bounds = boundsOf(area);
@@ -96,6 +107,25 @@ export function makeSurfaces(city, elevation, terrainAt, { deckHint } = {}) {
     const h = terrainAt(x, y), level = waterHeightAt(x, y);
     return level === null ? h : Math.min(h, level - 0.12);
   };
+  // Water level of the lowest water within `margin` metres (inside counts), or null.
+  const waterNear = (x, y, margin) => {
+    let h = null;
+    for (const [a, level] of water) {
+      const b = boundsOf(a);
+      if (x < b[0] - margin || y < b[1] - margin || x > b[2] + margin || y > b[3] + margin) continue;
+      if (inArea(x, y, a) || distanceToRing(a.outer, x, y) <= margin) h = h === null ? level : Math.min(h, level);
+    }
+    return h;
+  };
+  // Height of a ground-mesh vertex. The mesh only carries its vertices, so a coarse cell that straddles
+  // a shore lets its high outer vertex lift terrain through the flat water and the water edge follows
+  // the grid instead of the mapped outline. Every vertex of a cell that touches water is lowered, which
+  // leaves the whole outline under water and a one-cell bank around it. Objects and roads keep
+  // `groundAt`, so they do not sink at the shore.
+  const meshGroundAt = (x, y, step) => {
+    const h = terrainAt(x, y), level = waterNear(x, y, step * 1.5);
+    return level === null ? h : Math.min(h, level - 0.12);
+  };
   const roads = (city.roads || []).filter((r) => r.points?.length >= 2 && !r.tunnel);
   const bridges = roads.filter(raised), vertices = new Map();
   roads.forEach((r) => r.points.forEach((p) => {
@@ -167,5 +197,5 @@ export function makeSurfaces(city, elevation, terrainAt, { deckHint } = {}) {
     }
     return h;
   };
-  return { water, waterHeightAt, groundAt, heightFor, surfaceAt, profiles, bridgeDecks };
+  return { water, waterHeightAt, groundAt, meshGroundAt, heightFor, surfaceAt, profiles, bridgeDecks };
 }

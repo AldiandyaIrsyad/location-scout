@@ -73,3 +73,25 @@ test('a mapped water elevation needs a finite datum; otherwise the level is esti
     assert.ok(s.waterHeightAt(0, 0) < 0, 'estimated from the riverbed, not the mapped elevation');
   }
 });
+
+test('a coarse ground grid cannot lift terrain through a pool, and objects near the shore keep their height', async () => {
+  const { groundGridHeight } = await import('../web/js/surface-geometry.js');
+  const pool = { outer: [[-40, -22], [40, -22], [40, 22], [-40, 22]], holes: [] };
+  const sloped = (x, y) => 3 + 0.06 * x + 0.05 * y; // terrain well above the pool bed on its high side
+  const s = makeSurfaces({ size: 300, water: [pool], roads: [] }, null, sloped);
+  const size = 2000, segments = 128, step = size / segments;
+  const level = s.waterHeightAt(0, 0);
+
+  const worst = (corner) => {
+    let top = -Infinity;
+    for (let x = -40; x <= 40; x += 1) for (let y = -22; y <= 22; y += 1) {
+      top = Math.max(top, groundGridHeight(x, y, size, segments, corner) - level);
+    }
+    return top;
+  };
+  assert.ok(worst((x, y) => s.groundAt(x, y)) > 0, 'carving only inside the outline leaves terrain poking through');
+  assert.ok(worst((x, y) => s.meshGroundAt(x, y, step)) < 0, 'the whole outline is under water');
+
+  assert.equal(s.meshGroundAt(500, 500, step), sloped(500, 500), 'a vertex far from water is untouched');
+  assert.equal(s.groundAt(40 + 3, 0), sloped(43, 0), 'objects just outside the outline are not lowered');
+});

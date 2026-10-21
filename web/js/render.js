@@ -1710,11 +1710,15 @@ export class CityRenderer {
     return h;
   }
 
-  /** Ground height (with water carved in) at a grid corner, memoised for the current build. */
-  _groundCorner(x, y) {
+  /**
+   * Ground-mesh height (with water carved in) at a grid corner of a mesh whose cells are `step` metres,
+   * memoised for the current build. Land cover drapes over the same corners, so it stays on the mesh.
+   */
+  _groundCorner(x, y, step) {
     const key = gridKey(x, y);
-    let h = this._groundSamples.get(key);
-    if (h === undefined) this._groundSamples.set(key, h = this.groundHeight(x, y));
+    const samples = this._groundSamples.get(step) ?? this._groundSamples.set(step, new Map()).get(step);
+    let h = samples.get(key);
+    if (h === undefined) samples.set(key, h = this._surfaces.meshGroundAt(x, y, step));
     return h;
   }
 
@@ -1851,7 +1855,7 @@ export class CityRenderer {
         const regions=[{size:nearSize,exclude:0}];
         if(this._surr)regions.push({size:this._surr.farSize || this._elev.size,exclude:nearSize/2});
         for(const region of regions)for(const part of clipTriangle(clipped,region.size/2,region.exclude)) {
-          for(const piece of drapeTriangle(part,region.size,seg,(x,y)=>this._groundCorner(x,y))) {
+          for(const piece of drapeTriangle(part,region.size,seg,(x,y)=>this._groundCorner(x,y,region.size/seg))) {
             const point=p=>[p[0],p[2]+yOff,-p[1]];
             batch.tri(point(piece[0]),point(piece[1]),point(piece[2]),UP,col);
           }
@@ -2041,7 +2045,7 @@ export class CityRenderer {
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const z = pos.getZ(i);
-      pos.setY(i, this.groundHeight(x, -z));
+      pos.setY(i, useTerrain ? this._groundCorner(x, -z, size / seg) : this.groundHeight(x, -z));
       cols[i * 3] = gc[0];
       cols[i * 3 + 1] = gc[1];
       cols[i * 3 + 2] = gc[2];

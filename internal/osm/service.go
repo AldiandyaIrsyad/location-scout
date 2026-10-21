@@ -74,7 +74,7 @@ func NewService(f upstream.Fetcher, overpassURLs []string, osmTTL time.Duration,
 
 // City returns the size x size square centred on (lat, lon), with guessed heights re-rolled by seed.
 func (s *CityService) City(ctx context.Context, lat, lon float64, size int, seed int) (*CityData, error) {
-	key := fmt.Sprintf("city:v2:%s:%s:%d:%d", toFixed(lat, 5), toFixed(lon, 5), size, seed)
+	key := fmt.Sprintf("city:v3:%s:%s:%d:%d", toFixed(lat, 5), toFixed(lon, 5), size, seed)
 	var cached CityData
 	if s.loadResult(ctx, key, &cached) {
 		return &cached, nil
@@ -94,7 +94,7 @@ func (s *CityService) City(ctx context.Context, lat, lon float64, size int, seed
 
 // Surroundings returns the building footprints of the farSize square outside the inner size square.
 func (s *CityService) Surroundings(ctx context.Context, lat, lon float64, size, farSize int) (*Surroundings, error) {
-	key := fmt.Sprintf("sur:v2:%s:%s:%d:%d", toFixed(lat, 5), toFixed(lon, 5), size, farSize)
+	key := fmt.Sprintf("sur:v3:%s:%s:%d:%d", toFixed(lat, 5), toFixed(lon, 5), size, farSize)
 	var cached Surroundings
 	if s.loadResult(ctx, key, &cached) {
 		return &cached, nil

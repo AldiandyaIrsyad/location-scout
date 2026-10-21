@@ -45,6 +45,10 @@ type Area struct {
 	Outer []geo.Point   `json:"outer"`
 	Holes [][]geo.Point `json:"holes"`
 	Kind  string        `json:"kind"`
+	// Sport and Surface are set on leisure=pitch only. Sport is the mapped sport, or "multi" when
+	// several are tagged; the renderer draws that sport's court markings.
+	Sport   string `json:"sport,omitempty"`
+	Surface string `json:"surface,omitempty"`
 }
 
 // MappedObject is a small mapped landmark or point feature such as a statue,

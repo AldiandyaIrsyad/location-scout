@@ -2,6 +2,7 @@ package osm
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"os"
 	"strconv"
@@ -532,5 +533,47 @@ func TestParseRejectsInvalidJSON(t *testing.T) {
 	}
 	if _, err := ParseSurroundings([]byte("{"), testLat, testLon, testSize, 800); err == nil {
 		t.Error("ParseSurroundings accepted invalid JSON")
+	}
+}
+
+func TestPitchAreasKeepSportAndSurface(t *testing.T) {
+	cases := []struct {
+		name        string
+		tags        string
+		kind        string
+		sport, surf string
+	}{
+		{"single sport", `"leisure":"pitch","sport":"basketball","surface":"Asphalt"`, "pitch", "basketball", "asphalt"},
+		{"repeated sport is one sport", `"leisure":"pitch","sport":"tennis; Tennis"`, "pitch", "tennis", ""},
+		{"different sports are multi", `"leisure":"pitch","sport":"soccer;futsal"`, "pitch", "multi", ""},
+		{"untagged sport", `"leisure":"pitch"`, "pitch", "", ""},
+		{"only pitches carry a sport", `"leisure":"park","sport":"basketball","surface":"grass"`, "park", "", ""},
+	}
+	elements := make([]string, len(cases))
+	for i, c := range cases {
+		// each pitch is its own 20 m square, 30 m apart along the east axis, inside the 400 m area
+		lon := testLon + float64(i)*0.0003
+		elements[i] = fmt.Sprintf(`{"type":"way","id":%d,"tags":{%s},"geometry":[
+			{"lat":%f,"lon":%f},{"lat":%f,"lon":%f},{"lat":%f,"lon":%f},{"lat":%f,"lon":%f},{"lat":%f,"lon":%f}]}`,
+			9000+i, c.tags,
+			testLat, lon, testLat, lon+0.0002, testLat+0.0002, lon+0.0002, testLat+0.0002, lon, testLat, lon)
+	}
+	raw := []byte(`{"elements":[` + strings.Join(elements, ",") + `]}`)
+	city, err := Parse(raw, testLat, testLon, testSize, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(city.Green) != len(cases) {
+		t.Fatalf("green areas = %d, want %d", len(city.Green), len(cases))
+	}
+	byID := map[string]Area{}
+	for _, a := range city.Green {
+		byID[a.ID] = a
+	}
+	for i, c := range cases {
+		a := byID["w"+strconv.Itoa(9000+i)]
+		if a.Kind != c.kind || a.Sport != c.sport || a.Surface != c.surf {
+			t.Errorf("%s: kind/sport/surface = %q/%q/%q, want %q/%q/%q", c.name, a.Kind, a.Sport, a.Surface, c.kind, c.sport, c.surf)
+		}
 	}
 }

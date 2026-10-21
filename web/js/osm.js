@@ -3,7 +3,7 @@
 // under a sub-path. Local coordinates are meters, x = east, y = north, origin = the area center.
 
 // Keep browser-cached responses separate when the parsed data schema changes.
-const DATA_VERSION = 2;
+const DATA_VERSION = 3;
 
 /**
  * Buildings, roads, railways, water, green areas, trees and viewpoints for a size x size meter square

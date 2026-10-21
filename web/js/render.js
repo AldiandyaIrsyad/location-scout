@@ -17,6 +17,7 @@ import { makeSurfaces } from './surfaces.js';
 import { viewDepthRange } from './camera-fit.js';
 import { composeContext } from './context.js';
 import { clipTriangle, clipSegment, drapeTriangle, groundGridHeight } from './surface-geometry.js';
+import { courtKind, courtLayout, courtSurface, courtToLocal, pitchFrame } from './courts.js';
 
 const DEG = Math.PI / 180;
 // One number per millimetre position, for Map keys on hot per-vertex paths (no string allocation).
@@ -75,6 +76,13 @@ const PAL = {
   rail: '#6d6d70',
   guard: '#7d8189',
   tactile: '#e8b923',
+  courtLine: '#fbfbf6',
+  hoopPole: '#5c6168',
+  backboard: '#e8eef3',
+  rim: '#e8703a',
+  goal: '#f4f4f0',
+  netPost: '#5a5f66',
+  netTape: '#f4f4f0',
   pole: '#5a4a3c',
   signal: '#3d3d3d',
   trunk: '#7b5a3e',
@@ -2345,11 +2353,15 @@ export class CityRenderer {
     for (const a of water || []) {
       if (a.outer && a.outer.length >= 3) this._flatPoly(wb, a.outer, a.holes, 0, colArr(PAL.water), true, () => this._surfaces.water.get(a), bounds);
     }
+    const courtLines = new Batch();
+    const courtGear = new Batch();
     for (const a of green || []) {
       if (!a.outer || a.outer.length < 3) continue;
-      const hex = a.kind === 'forest' || a.kind === 'wood' ? '#7fae6b' : PAL.green;
+      const pitchSurface = a.kind === 'pitch' ? courtSurface(a.sport, a.surface) : null;
+      const hex = pitchSurface || (a.kind === 'forest' || a.kind === 'wood' ? '#7fae6b' : PAL.green);
       const layer = ['park','recreation_ground'].includes(a.kind) ? 0.012 : ['forest','wood','orchard'].includes(a.kind) ? 0.032 : 0.022;
       this._flatPoly(gb, a.outer, a.holes, layer, colArr(hex), true, null, bounds);
+      if (a.kind === 'pitch' && a.sport) this._buildCourt(courtLines, courtGear, a, bounds);
     }
     for (const a of areas || []) {
       if (!a.outer || a.outer.length < 3) continue;
@@ -2360,7 +2372,51 @@ export class CityRenderer {
       { geo: wb.toGeometry(), role: 'water', name: 'water', group: 'water' },
       { geo: gb.toGeometry(), role: 'green', name: 'green', group: 'green' },
       { geo: ab.toGeometry(), role: 'area', name: 'areas', group: 'ground' },
+      { geo: courtLines.toGeometry(), role: 'lane', name: 'markings', group: 'details' },
+      { geo: courtGear.toGeometry(), role: 'detail', name: 'court-equipment', group: 'details' },
     ];
+  }
+
+  /**
+   * Line markings and equipment (hoops, goals, nets) for a mapped sport pitch. The court is placed in the
+   * smallest rectangle around the outline; a pitch is built only by the region its centre falls in, so the
+   * inner and surrounding passes never draw it twice.
+   */
+  _buildCourt(lines, gear, a, bounds) {
+    const frame = pitchFrame(a.outer);
+    const reach = Math.max(Math.abs(frame.cx), Math.abs(frame.cy));
+    if (reach > bounds.half || reach <= bounds.exclude || frame.length < 8 || frame.width < 4) return;
+    const layout = courtLayout(courtKind(a.sport), frame.length, frame.width);
+    const P = (u, v) => courtToLocal(frame, u, v);
+    const lineCol = colArr(PAL.courtLine);
+    for (const line of layout.lines) this._ribbon(lines, resamplePolyline(line.map(([u, v]) => P(u, v)), 2), 0.14, 0.09, lineCol);
+    // an axis-aligned (in court coordinates) box, from h0 to h1 above the ground
+    const box = (u0, u1, v0, v1, h0, h1, col) => this._prism(gear, [P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1)], h0, h1, colArr(col));
+    for (const p of layout.props) {
+      if (p.type === 'hoop') {
+        // pole behind the baseline, an arm out to the backboard, and the rim as a ring
+        const d = p.dir;
+        const span = (a0, a1) => [Math.min(p.u + d * a0, p.u + d * a1), Math.max(p.u + d * a0, p.u + d * a1)];
+        const [pu0, pu1] = span(-0.7, -0.5), [au0, au1] = span(-0.6, 1.2), [bu0, bu1] = span(1.2, 1.26);
+        box(pu0, pu1, p.v - 0.1, p.v + 0.1, 0, 3.5, PAL.hoopPole);
+        box(au0, au1, p.v - 0.05, p.v + 0.05, 3.35, 3.45, PAL.hoopPole);
+        box(bu0, bu1, p.v - 0.9, p.v + 0.9, 2.9, 3.95, PAL.backboard);
+        const rim = [];
+        for (let k = 0; k <= 16; k++) rim.push(P(p.u + d * 1.58 + 0.23 * Math.cos((k / 16) * Math.PI * 2), p.v + 0.23 * Math.sin((k / 16) * Math.PI * 2)));
+        this._ribbon(gear, rim, 0.05, 3.05, colArr(PAL.rim));
+      } else if (p.type === 'goal') {
+        const [g0, g1] = [p.u - 0.06, p.u + 0.06], half = p.width / 2;
+        box(g0, g1, p.v - half - 0.06, p.v - half + 0.06, 0, p.height, PAL.goal);
+        box(g0, g1, p.v + half - 0.06, p.v + half + 0.06, 0, p.height, PAL.goal);
+        box(g0, g1, p.v - half, p.v + half, p.height - 0.12, p.height, PAL.goal);
+      } else if (p.type === 'net') {
+        // two posts and the net's top tape; the net itself is too fine to draw
+        const half = p.span / 2;
+        box(p.u - 0.05, p.u + 0.05, p.v - half - 0.05, p.v - half + 0.05, 0, p.height + 0.1, PAL.netPost);
+        box(p.u - 0.05, p.u + 0.05, p.v + half - 0.05, p.v + half + 0.05, 0, p.height + 0.1, PAL.netPost);
+        box(p.u - 0.02, p.u + 0.02, p.v - half, p.v + half, p.height - 0.08, p.height, PAL.netTape);
+      }
+    }
   }
 
   // ----- trees ----------------------------------------------------------------

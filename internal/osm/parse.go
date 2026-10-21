@@ -289,8 +289,7 @@ func collect(elements []osmElement, lat0, lon0 float64, b box) *collected {
 				if ring == nil || !intersectsBox(ring, true, b) {
 					continue
 				}
-				area := Area{ID: id, Outer: orient(ring, true), Holes: [][]geo.Point{}, Kind: areaKind(cat, tags)}
-				pushArea(out, cat, area)
+				pushArea(out, cat, newArea(id, orient(ring, true), [][]geo.Point{}, cat, tags))
 			}
 			continue
 		}
@@ -328,7 +327,7 @@ func collect(elements []osmElement, lat0, lon0 float64, b box) *collected {
 						out.outlines = append(out.outlines, item)
 					}
 				} else {
-					pushArea(out, cat, Area{ID: id, Outer: poly.outer, Holes: poly.holes, Kind: areaKind(cat, tags)})
+					pushArea(out, cat, newArea(id, poly.outer, poly.holes, cat, tags))
 				}
 			}
 		}
@@ -437,6 +436,32 @@ func areaKind(cat string, tags tagMap) string {
 		return "parking"
 	}
 	return cat
+}
+
+func newArea(id string, outer []geo.Point, holes [][]geo.Point, cat string, tags tagMap) Area {
+	a := Area{ID: id, Outer: outer, Holes: holes, Kind: areaKind(cat, tags)}
+	if a.Kind == "pitch" {
+		a.Sport = pitchSport(tags["sport"])
+		a.Surface = strings.ToLower(strings.TrimSpace(tags["surface"]))
+	}
+	return a
+}
+
+// pitchSport reduces a sport tag ("basketball", "soccer;futsal") to one sport name. Several different
+// sports on one pitch are "multi", because markings for just one of them would be wrong.
+func pitchSport(tag string) string {
+	sport := ""
+	for _, part := range strings.Split(tag, ";") {
+		part = strings.ToLower(strings.TrimSpace(part))
+		if part == "" || part == sport {
+			continue
+		}
+		if sport != "" {
+			return "multi"
+		}
+		sport = part
+	}
+	return sport
 }
 
 func pushArea(out *collected, cat string, a Area) {

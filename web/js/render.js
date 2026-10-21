@@ -19,13 +19,41 @@ import { composeContext } from './context.js';
 import { clipTriangle, clipSegment, drapeTriangle, groundGridHeight } from './surface-geometry.js';
 import { courtKind, courtLayout, courtSurface, courtToLocal, pitchFrame } from './courts.js';
 import { BARRIER_GROUPS, BARRIER_STYLES, barrierHeight, barrierRuns, fixtureFacing, roadIndex } from './barriers.js';
-import { benchColor, benchParts, roofColors, roofShapeFor, wallColors } from './scenestyle.js';
+import { benchColor, benchParts, benchWear, roofColors, roofShapeFor, wallColors } from './scenestyle.js';
 import { paletteFor } from './palette.js';
+import { buildWallIndex, insideBuilding, nearestWall } from './walls.js';
+import { hydrantChance, hydrantColour, hydrantParts, hydrantSpacing } from './hydrants.js';
+import { canBeTaxi, roofLight, taxiChance, taxiColour } from './taxis.js';
+import { cafeChance, cafeSpacing, chairColour, chairParts, hasParasol, parasolColour, parasolParts, tableParts, terraceLayout } from './cafe.js';
+import { isClosed, shutterChance, shutterColour, shutterParts, shutterRows, shutterRun, shutterSpacing } from './shutters.js';
+import { hasTrim, outwardStrips, trimBands, trimTone } from './walltrim.js';
+import { litterColour, litterCount, litterKind, litterScatter, litterShape } from './litter.js';
+import { hasUmbrella, umbrellaColour, umbrellaParts } from './umbrellas.js';
+import { plateCentre, plateChance, plateColour, plateInk, plateParts, plateSpacing } from './streetnames.js';
+import { BIN_COLOURS, bagColour, bagPile, binColour, binParts, rubbishChance, rubbishKind, rubbishSpacing } from './rubbish.js';
+import { adChance, adKind, adSpacing, posterColour, posterParts } from './posters.js';
+import { BIRD_COLOURS, birdChance, birdKind, birdParts, birdSpacing, flockSize } from './birds.js';
+import { scooterChance, scooterColour, scooterGroup, scooterParts, scooterSpacing, scooterStyle } from './scooters.js';
+import { postboxChance, postboxColour, postboxParts, postboxSpacing, postboxStyleFor } from './postboxes.js';
+import { NOREN_COLOURS, lanternChance, lanternColour, lanternCount, lanternParts, lanternSpacing, norenParts } from './lanterns.js';
+import { acChance, acParts, acSpacing, acTone, gapCentre, unitHeights } from './acunits.js';
+import { BALCONY_COLOURS, balconyChance, balconyParts, balconySpacing, balconyStyleFor, columnCentre, laundryItems, slabHeights } from './balconies.js';
+import { LEAF_COLOURS, POT_COLOURS, flowerColour, planterChance, planterCount, planterKind, planterParts, planterSpacing, planterWidth } from './planters.js';
+import { LAMP_GLASS, LAMP_POLE, lampChance, lampHeight, lampParts, lampSpacing, lampStyleFor } from './lamps.js';
+import { CRACK_SPACING, PATCH_SPACING, crackPoints, patchChance, patchPolygon, patchShade, patchSize, puddleChance, puddlePolygon, puddleSize, wetDarkening } from './roadpatches.js';
+import { COVER_SPACING, coverChance, coverShapes, coverTone, manholeOffset } from './roadcovers.js';
+import { MIRROR_POLE, POLE_COLOUR as SIGN_POLE, hasCurveMirror, roadSignChance, roadSignKind, roadSignSpacing, roadSignStyle, signShapes } from './roadsigns.js';
+import { WHEEL_RADIUS, bicycleParts, bikeChance, bikeColour, bikeGroup, bikeSpacing, bikeStyle } from './bicycle.js';
+import { itemSize, parapetStrips, placeOnRoof, roofAxis, rooftopPlan, tankColour } from './rooftop.js';
+import { awningColour, awningParts, awningSpacing, awningWidth, shopChance, signColour, signParts, signSpacing } from './shopfront.js';
+import { DRINK_COLOURS, VENDING_WIDTH, vendingChance, vendingColour, vendingGroupSize, vendingParts, vendingSpacing } from './vending.js';
+import { INSULATOR_COLOUR, POLE_HEIGHT, POLE_LOOK, TRANSFORMER_COLOUR, WIRE_COLOUR, catenary, hasTransformer, poleStyleFor, spanSag, wireSlots, wireSpans } from './wires.js';
 
 const DEG = Math.PI / 180;
 // One number per millimetre position, for Map keys on hot per-vertex paths (no string allocation).
 const gridKey = (x, y) => (Math.round(x * 1000) + 1e7) * 2e7 + Math.round(y * 1000) + 1e7;
 const UP = [0, 1, 0];
+const UP_VEC = new THREE.Vector3(0, 1, 0);
 const GROUP_NAMES = ['buildings', 'roads', 'ground', 'water', 'green', 'trees', 'details', 'people', 'surroundings'];
 
 // Layers: 0 = always visible, 1 = trunks shown only in the colour/tone pass ('tone-noline'),
@@ -99,6 +127,24 @@ const PAL = {
   surr: '#ddd6c7',
   person: '#c58f6a',
   car: ['#e9e9ee', '#c94a3b', '#3d5a80', '#f0c040', '#2f2f36', '#8fa3b0'],
+};
+
+// Sky colours per palette: [dusk, day] for the zenith and the horizon, and the colour of the glow around the sun.
+const SKY_PALETTES = {
+  clear: { top: ['#4b5a9a', '#4aa3ea'], hor: ['#f7a874', '#dff2fb'], glow: '#fff3c8' },
+  pastel: { top: ['#6a6fb0', '#8cc9f2'], hor: ['#f9b9a0', '#ffeef0'], glow: '#fff0d8' },
+  deep: { top: ['#3a4b94', '#2a72d6'], hor: ['#f29a68', '#bfe0fb'], glow: '#fff6d0' },
+  teal: { top: ['#44609a', '#28b4d8'], hor: ['#f5b184', '#e6fbf4'], glow: '#fffbd8' },
+  warm: { top: ['#5a5a9a', '#6fa8e0'], hor: ['#f59a5a', '#ffe2b8'], glow: '#ffd89a' },
+  overcast: { top: ['#6a708c', '#9eabbe'], hor: ['#c8a898', '#e4e8ee'], glow: '#f4f4f0' },
+};
+const mix = (a, b, t) => a + (b - a) * t;
+// Ambient colours for tinted shadows: [sky (surfaces facing up and sideways), ground bounce]
+const SHADOW_TINTS = {
+  blue: { sky: '#8fb2f2', ground: '#a6a8b8' },
+  violet: { sky: '#b09af0', ground: '#b09eb8' },
+  teal: { sky: '#8fd6c8', ground: '#a0b8a8' },
+  warm: { sky: '#f0c49a', ground: '#c8a888' },
 };
 
 // Crown colours per season (instance colours are picked from these with jitter)
@@ -481,6 +527,19 @@ const COMPOSITE_FRAG = `
   uniform float uFar;       // camera far plane in metres (depth = a * uFar)
   uniform float uFocal;     // focal length in target px
   uniform float uAoR;       // AO radius in metres
+  uniform mat3 uCamRot;     // camera -> world rotation (sky rays)
+  uniform vec2 uCamTan;     // tan(fov / 2) * aspect, tan(fov / 2)
+  uniform vec4 uCloud;      // cover 0..1, scale, softness 0..1, shade 0..1
+  uniform vec3 uCloudSun;   // direction to the sun in world space
+  uniform vec3 uCloudLit;   // sunlit cloud colour (sRGB)
+  uniform vec3 uCloudDark;  // shaded cloud colour (sRGB)
+  uniform vec3 uCloudOpt;   // style (0 puffy, 1 wispy, 2 layered), seed offset x / y
+  uniform vec3 uSkyTop;     // sky colour overhead (sRGB), colour styles only
+  uniform vec3 uSkyHor;     // sky colour at the horizon (sRGB)
+  uniform vec3 uSkyGlow;    // sun glow colour (sRGB)
+  uniform vec4 uSkyOpt;     // gradient curve, glow exponent, glow amount, on (0 = keep the background texture)
+  uniform vec2 uSkyTone;    // lines + tone: sky screentone strength and how far down from the zenith it reaches
+  uniform vec2 uInk;        // ink tint toward the local colour (colour + lines), ink fade with distance
   varying vec2 vUv;
 
   const vec2 DIRS[8] = vec2[8](
@@ -990,24 +1049,105 @@ const COMPOSITE_FRAG = `
     return e;
   }
 
+
+  // ---- clouds (sky pixels only) -------------------------------------------------------------
+  float vnoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash12(i);
+    float b = hash12(i + vec2(1.0, 0.0));
+    float c = hash12(i + vec2(0.0, 1.0));
+    float d = hash12(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+  }
+  float fbmN(vec2 p, int oct) {
+    float s = 0.0;
+    float a = 0.5;
+    float norm = 0.0;
+    for (int i = 0; i < 5; i++) {
+      if (i >= oct) break;
+      s += a * vnoise(p);
+      norm += a;
+      p = p * 2.03 + vec2(17.1, 9.2);
+      a *= 0.5;
+    }
+    return s / norm;
+  }
+  // density field in the sky plane; styles stretch the plane. oct: detail octaves (shape 4, lighting 3)
+  float cloudField(vec2 p, int oct) {
+    if (uCloudOpt.x > 1.5) p *= vec2(0.35, 1.7);      // layered: long flat banks
+    else if (uCloudOpt.x > 0.5) p *= vec2(0.5, 1.9);  // wispy streaks
+    float clump = vnoise(p * 0.45 + 3.1);
+    // domain warp: pushes the shapes into billows instead of lacy fractal edges
+    p += 0.45 * vec2(vnoise(p * 0.7 + 7.3), vnoise(p * 0.7 + 1.9)) - 0.225;
+    return fbmN(p, oct) * 0.72 + clump * 0.28;
+  }
+
+  // Sky colour (sRGB) along a screen ray: horizon haze rising to the zenith colour, plus a glow around the sun
+  vec3 skyGradient(vec2 uv) {
+    vec3 d = normalize(uCamRot * vec3((uv * 2.0 - 1.0) * uCamTan, -1.0));
+    float t = pow(clamp(d.y, 0.0, 1.0), uSkyOpt.x);
+    vec3 col = mix(uSkyHor, uSkyTop, t);
+    float sd = max(dot(d, normalize(uCloudSun)), 0.0);
+    float glow = (pow(sd, uSkyOpt.y) + 0.25 * pow(sd, 5.0)) * uSkyOpt.z;
+    return mix(col, uSkyGlow, clamp(glow, 0.0, 0.85));
+  }
+
+  // Sky-plane coordinate of a screen uv: xy = plane position, z = visibility (fades out at the horizon)
+  vec3 skyPlane(vec2 uv) {
+    vec3 d = normalize(uCamRot * vec3((uv * 2.0 - 1.0) * uCamTan, -1.0));
+    float k = 1.0 / (d.y + 0.2);
+    return vec3(d.xz * k * uCloud.y * 3.2 + uCloudOpt.yz, smoothstep(0.03, 0.22, d.y));
+  }
+
+  // x = cloud mask 0..1, y = outline 0..1 (ink styles), z = shade 0..1 (1 = in shadow), w = visible
+  vec4 cloudSample(vec2 uv, float lineR) {
+    if (uCloud.x <= 0.001) return vec4(0.0);
+    vec3 sp = skyPlane(uv);
+    float vis = sp.z;
+    if (vis <= 0.0) return vec4(0.0);
+    vec2 p = sp.xy;
+    float n = cloudField(p, 3);
+    float thr = mix(0.8, 0.32, clamp(uCloud.x, 0.0, 1.0));
+    float aa = max(fwidth(n), 1e-4);
+    float w = max(mix(0.004, 0.09, uCloud.z), aa);
+    float m = smoothstep(thr - w, thr + w, n) * vis;
+    // shade: the side facing away from the sun, and the underside (nothing of the cloud just below this pixel)
+    vec2 sd = normalize(uCloudSun.xz + 1e-4);
+    float n2 = cloudField(p * 0.93 + sd * 0.12, 2);
+    float n1 = cloudField(p, 2);
+    float shSun = smoothstep(0.0, 0.015 + 0.06 * uCloud.z, n2 - n1);
+    float nb = cloudField(skyPlane(uv - vec2(0.0, 0.045)).xy, 3);
+    float shBot = 1.0 - smoothstep(thr - 0.02, thr + 0.05 + 0.05 * uCloud.z, nb);
+    float sh = max(shSun, shBot * 0.9) * smoothstep(thr - 0.02, thr + 0.07, n);
+    float lineVis = smoothstep(0.35, 0.85, vis);
+    float line = (1.0 - smoothstep(lineR * mix(0.55, 1.15, sh), lineR * mix(0.55, 1.15, sh) + 1.0, abs(n - thr) / aa)) * lineVis;
+    return vec4(m, line, sh, vis);
+  }
+
   void main() {
     gUV = vUv;
     float ink = max(depthEdge(vUv, uOuter), creaseEdge(vUv, uInner));
     vec2 pix = gl_FragCoord.xy;
     float dN = texture2D(tND, vUv).a;
     bool sky = dN >= 0.999;
+    // far lines get lighter (atmospheric perspective): full strength within 40 m, down to (1 - fade) past 450 m
+    ink *= 1.0 - uInk.y * 0.7 * smoothstep(40.0, 450.0, dN * uFar);
 
     float ao = 0.0;
     if (uMode >= 1 && uShade > 0.0 && !sky) ao = aoOcc(vUv, pix, dN * uFar);
 
-    if (uMode == 3) {
-      vec3 c = texture2D(tColor, vUv).rgb * (1.0 - clamp(uShade * ao * 0.55, 0.0, 0.85));
-      gl_FragColor = vec4(toSRGB(c), 1.0);
-      return;
-    }
-    if (uMode == 2) {
-      vec3 c = texture2D(tColor, vUv).rgb * (1.0 - clamp(uShade * ao * 0.55, 0.0, 0.85));
-      gl_FragColor = vec4(mix(toSRGB(c), vec3(0.05, 0.045, 0.05), ink), 1.0);
+    if (uMode == 3 || uMode == 2) {
+      vec3 c = toSRGB(texture2D(tColor, vUv).rgb * (1.0 - clamp(uShade * ao * 0.55, 0.0, 0.85)));
+      if (sky) {
+        if (uSkyOpt.w > 0.5) c = skyGradient(vUv);
+        vec4 cl = cloudSample(vUv, 0.0);
+        c = mix(c, mix(uCloudLit, uCloudDark, cl.z * uCloud.w), cl.x);
+      }
+      // ink colour: near black, or a dark warm version of the colour it outlines (coloured line work)
+      vec3 inkCol = mix(vec3(0.05, 0.045, 0.05), mix(c * c * 0.55, vec3(0.16, 0.09, 0.1), 0.3), uInk.x);
+      gl_FragColor = vec4(uMode == 2 ? mix(c, inkCol, ink) : c, 1.0);
       return;
     }
 
@@ -1048,6 +1188,19 @@ const COMPOSITE_FRAG = `
         }
         tone = toneVal(clamp(C, 0.0, 0.9), pix);
       }
+    }
+
+    if (sky) {
+      // clouds in the ink styles: outline, plus tone on the shaded side (lines + tone)
+      vec4 cl = cloudSample(vUv, uOuter * 0.4);
+      if (uMode == 1) tone = min(tone, toneVal(0.34 * cl.z * cl.x * uCloud.w, pix));
+      if (uMode == 1 && uSkyTone.x > 0.0) {
+        // screentone fading from the zenith towards the horizon, kept off the clouds so they stay paper white
+        vec3 sd3 = normalize(uCamRot * vec3((vUv * 2.0 - 1.0) * uCamTan, -1.0));
+        float g = pow(smoothstep(0.03, 0.2 + uSkyTone.y * 0.8, clamp(sd3.y, 0.0, 1.0)), 1.4);
+        tone = min(tone, toneVal(uSkyTone.x * g * (1.0 - cl.x), pix));
+      }
+      ink = max(ink, cl.y);
     }
 
     float v = (blk && uWhite > 0.5) ? mix(0.14, 1.0, ink) : min(tone, 1.0 - ink);
@@ -1355,6 +1508,13 @@ export class CityRenderer {
       treeSize: 'normal',
       // World settings (what is in the scene); see web/js/world.js for the panel and the ranges.
       peopleDensity: 0, // 0..100
+      hydrantDensity: 30, hydrantColour: 'auto', hydrantSize: 1, // fire hydrants
+      taxiShare: 40, taxiColour: 'auto', // taxis among the cars: slider (scaled by the place) and colour
+      cafeDensity: 20, cafeColour: 'auto', cafeParasol: 40, cafeSize: 1, // cafe terraces
+      shutterDensity: 30, shutterColour: 'auto', shutterClosed: 15, // window shutters
+      trimShare: 40, trimTone: 'light', trimDepth: 0.07, // wall trim: share of buildings, tone, depth
+      litterDensity: 0, litterColour: 'auto', litterSize: 1, // fallen leaves under trees
+      umbrellaShare: 0, umbrellaColour: 'mixed', umbrellaSize: 1, // % of people holding an umbrella, its colour and size
       walkShare: 75, standShare: 15, talkShare: 10, // relative weights of walkers / people standing / talking groups
       groupSize: 4, // most people in one talking group (2..6)
       kidsShare: 6, // % of people who are children
@@ -1372,12 +1532,18 @@ export class CityRenderer {
       treeSizeMin: 0.95, treeSizeMax: 1.05,
       landmarks: true, // replace famous landmarks with hand-built models (see landmarks.js)
       detailPoles: true, detailSignals: true, detailRails: true, detailCrosswalks: true, detailTactile: true,
+      edgeLines: 'both', roadSignDensity: 35, roadSignStyle: 'auto', mirrorDensity: 60, plateDensity: 25, plateColour: 'auto', plateSize: 1, rubbishDensity: 25, rubbishKind: 'auto', binColour: 'mixed', rubbishSize: 1, adDensity: 15, adStyle: 'auto', adSize: 1, posterColour: 'mixed', birdDensity: 25, birdKind: 'auto', birdSize: 1, scooterDensity: 20, scooterColour: 'mixed', scooterStyle: 'mixed', scooterSize: 1, postboxDensity: 20, postboxStyle: 'auto', postboxSize: 1, lanternDensity: 30, lanternColour: 'mixed', lanternSize: 1, norenDensity: 30, acDensity: 30, acTone: 'mixed', acSize: 1, balconyDensity: 35, balconyStyle: 'auto', balconyWidth: 2, laundryAmount: 50, wetStreets: 0, puddleSize: 1, planterDensity: 30, planterStyle: 'mixed', planterColour: 'mixed', planterSize: 1, skyScreentone: 0, skyScreentoneReach: 50, surroundWindows: true, lampDensity: 40, lampStyle: 'auto', lampHeight: 7, patchDensity: 40, crackDensity: 40, patchSize: 1, coverDensity: 50, coverTone: 'mixed', coverSize: 1, carTrim: true, bikeDensity: 30, bikeColour: 'mixed', bikeStyle: 'mixed', roofClutter: 60, roofParapet: 0.45, roofTank: 'auto', awningDensity: 35, awningColour: 'mixed', awningDepth: 1.2, signDensity: 30, vendingDensity: 30, vendingColour: 'mixed', poleSpacing: 30, poleStyle: 'auto', poleTransformers: 20, wireCount: 3, wireSag: 0.5, wireThickness: 0.035, // utility poles and wires, see wires.js
       roofStyle: 'auto', // auto (as mapped) | flat | gabled | hipped | pyramidal
       roofColor: 'auto', // auto (by place) | zinc | slate | terracotta | copper | charcoal
       wallTone: 'auto', // auto (by place) | stone | white | brick | grey
       furnBenches: true, furnBins: true, furnStops: true,
-      benchStyle: 'park', benchColor: 'wood', binStyle: 'square', // see scenestyle.js
+      benchStyle: 'park', benchColor: 'wood', binStyle: 'square', benchWear: 0, // see scenestyle.js
       barrierFences: true, barrierWalls: true, barrierHedges: true, barrierScale: 1,
+      // Sky (see the Sky section of the World settings); drawn in the composite pass, so they never rebuild the scene
+      cloudCover: 40, cloudScale: 1, cloudSoft: 30, cloudShade: 60, cloudStyle: 'puffy', cloudDark: 'grey',
+      skyPalette: 'clear', skyHaze: 50, skyGlow: 40, shadowTint: 'blue', shadowTintAmt: 0,
+      windowVariety: 60, windowCurtains: 30, windowReflection: 60, windowFrames: 50, wallWeathering: 40, paveJoints: 60, paveSlab: 0.6, roadWear: 35, // window look and ground surface, a uniform (no rebuild)
+      foliageSat: 100, foliageHue: 0, foliageLight: 100, // global grading of crown colours (needs a rebuild)
       straightVerticals: false,
       twoSidedShadows: false,
     };
@@ -1393,7 +1559,7 @@ export class CityRenderer {
       blackRange: 0.4,
       whiteLines: false,
     };
-    this.air = { shade: 0, haze: 1, sky: false };
+    this.air = { shade: 0, haze: 1, sky: false, inkTint: 0, inkFade: 0 };
     this.lensMM = 35;
     this._cssW = canvas.clientWidth || 800;
     this._cssH = canvas.clientHeight || 600;
@@ -1479,10 +1645,17 @@ export class CityRenderer {
     if (!this.hemi) return;
     let sky;
     let ground;
-    if (this.style === 'color' || this.style === 'clay') {
+    if (this.style === 'color' || this.style === 'clay' || this.style === 'color-lines') {
       if (this.air.sky) {
         sky = 0xc3dcf5;
         ground = 0xb9ae98;
+        // coloured shadows: the ambient light (which is all that reaches shaded surfaces) leans toward the tint
+        const tint = SHADOW_TINTS[this.options.shadowTint];
+        const amt = clamp((this.options.shadowTintAmt ?? 0) / 100, 0, 1);
+        if (tint && amt > 0) {
+          sky = new THREE.Color(mixHex('#c3dcf5', tint.sky, amt)).getHex();
+          ground = new THREE.Color(mixHex('#b9ae98', tint.ground, amt)).getHex();
+        }
       } else {
         sky = 0xe6e6e6;
         ground = 0xa19f9b;
@@ -2028,7 +2201,30 @@ export class CityRenderer {
       const box = (u0, u1, v0, v1, h0, h1, hex) => this._prism(
         batch, [[u0, v0], [u1, v0], [u1, v1], [u0, v1]].map(([u, v]) => [x + u * c - v * s, y + u * s + v * c]), h0, h1, colArr(hex));
       if (f.kind === 'bench') {
-        for (const p of parts) box(p.u0, p.u1, p.v0, p.v1, p.h0, p.h1, benchHex[p.role]);
+        // condition: the seat gets lighter or darker, the frame rusts, and dark stains mark the seat
+        const wear = benchWear(o.benchWear, rng(hashStr(`bench:${x.toFixed(1)}:${y.toFixed(1)}`)));
+        const seatHex = wear.seatShift >= 0 ? mixHex(seat, '#ffffff', wear.seatShift) : mixHex(seat, '#000000', -wear.seatShift);
+        const frameHex = mixHex(PAL.benchFrame, '#8a5a3a', wear.rust);
+        const slat = rng(hashStr(`slat:${x.toFixed(1)}:${y.toFixed(1)}`));
+        const jitter = 0.05 + 0.18 * (Math.max(0, Math.min(100, Number(o.benchWear) || 0)) / 100); // every board a little different
+        for (const p of parts) {
+          let hex = p.role === 'frame' ? frameHex : benchHex[p.role];
+          if (p.role === 'seat') {
+            const j = (slat() - 0.5) * jitter;
+            hex = j >= 0 ? mixHex(seatHex, '#ffffff', j) : mixHex(seatHex, '#000000', -j);
+          }
+          box(p.u0, p.u1, p.v0, p.v1, p.h0, p.h1, hex);
+        }
+        // stains: dark patches on the boards of the seat (the boards below 0.5 m, not the back or a table top)
+        const boards = parts.filter((p) => p.role === 'seat' && p.h1 <= 0.5);
+        for (const st of boards.length ? wear.stains : []) {
+          const board = boards[Math.min(boards.length - 1, Math.floor((st.u * 0.5 + 0.5) * boards.length))];
+          const half = (board.v1 - board.v0) / 2;
+          const cv = (board.v0 + board.v1) / 2 + st.v * half * 0.9;
+          const hl = Math.min(st.w, 0.3) * half / 2;
+          const um = (board.u1 - board.u0) * 0.15;
+          box(board.u0 + um, board.u1 - um, Math.max(board.v0, cv - hl), Math.min(board.v1, cv + hl), board.h1, board.h1 + 0.006, mixHex(seat, '#241a10', 0.7));
+        }
       } else if (f.kind === 'waste_basket') {
         if (o.binStyle === 'round') {
           const ring = (r) => Array.from({ length: 8 }, (_, i) => [r * Math.cos((i + 0.5) * Math.PI / 4), r * Math.sin((i + 0.5) * Math.PI / 4)]);
@@ -2111,9 +2307,21 @@ export class CityRenderer {
       const v0 = wallsB.p.length / 3;
       addWalls(wallsB, outer, holes, bottom, wallTop, wc);
       if (solid) plain.push([v0, wallsB.p.length / 3]);
+      // trim: plinth, string courses and cornice as thin bands round the footprint (no window grid on them)
+      if (!surroundings && !solid && holes.length === 0 && hasTrim(this.options.trimShare ?? 0, rng(hashStr(`trim:${b.id ?? outer.length}`))())) {
+        const t0 = wallsB.p.length / 3;
+        const tc = wc.map((v) => clamp(v * trimTone(this.options.trimTone), 0.1, 1));
+        const g0 = this.groundHeight(c[0], c[1]);
+        for (const band of trimBands(bottom, wallTop, this.options.trimDepth, Math.max(groundC, g0))) {
+          const bc = band.role === 'plinth' ? tc.map((v) => v * 0.9) : tc;
+          for (const q of outwardStrips(outer, band.out)) this._prism(wallsB, q, band.h0, band.h1, bc, () => 0);
+        }
+        plain.push([t0, wallsB.p.length / 3]);
+      }
       else if (!surroundings && this._segs) addWindowSegs(this._segs, outer, bottom, wallTop);
       if (flat) {
         addCap(roofsB, outer, holes, topAbs, rc);
+        if (!surroundings && !solid && holes.length === 0) this._roofTop(roofsB, outer, topAbs, height, wc, r);
       } else {
         addRoof(roofsB, outer, wallTop, roofH, shape, rc);
       }
@@ -2122,7 +2330,8 @@ export class CityRenderer {
     if (extra) extra(roofsB, (x, y) => this.groundHeight(x, y));
     const walls = wallsB.toGeometry();
     // inner city walls get the window grid in the edge and lit / colour passes (aWin = 1 per vertex)
-    if (walls && !surroundings) {
+    const winOn = !surroundings || this.options.surroundWindows !== false; // distant buildings get the window grid too
+    if (walls && winOn) {
       const win = new Float32Array(walls.attributes.position.count).fill(1);
       for (const [a, z] of plain) win.fill(0, a, z);
       walls.setAttribute('aWin', new THREE.Float32BufferAttribute(win, 1));
@@ -2130,8 +2339,66 @@ export class CityRenderer {
     // roofs (and the landmark models drawn with them) carry an explicit 0, so the window grid never
     // shows on them whatever the GPU still holds from the walls mesh
     const roofs = roofsB.toGeometry();
-    if (roofs && !surroundings) roofs.setAttribute('aWin', new THREE.Float32BufferAttribute(new Float32Array(roofs.attributes.position.count), 1));
+    if (roofs && winOn) roofs.setAttribute('aWin', new THREE.Float32BufferAttribute(new Float32Array(roofs.attributes.position.count), 1));
     return { walls, roofs };
+  }
+
+  /**
+   * Parapet and plant on a flat roof: a low wall round the edge, air-conditioner units, a water tank on legs,
+   * a stairwell box and an antenna mast (amounts from the "Rooftop clutter" slider, see rooftop.js).
+   */
+  _roofTop(batch, outer, topAbs, height, wallCol, r) {
+    const o = this.options;
+    const flatY = () => topAbs;
+    const parapet = clamp(Number(o.roofParapet ?? 0.45) || 0, 0, 1.4);
+    if (parapet > 0.05) {
+      const col = wallCol.map((v) => clamp(v * 1.06, 0, 1));
+      for (const q of parapetStrips(outer, 0.25)) this._prism(batch, q, 0, parapet, col, flatY);
+    }
+    const plan = rooftopPlan(r, { area: Math.abs(signedArea(outer)), height, amount: o.roofClutter ?? 60 });
+    if (!plan.ac && !plan.tank && !plan.stair && !plan.mast) return;
+    const { ux, uy } = roofAxis(outer);
+    const vx = -uy;
+    const vy = ux;
+    const placed = [];
+    const box = (cx, cy, w, d, h0, h1, col) => this._prism(batch, [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [cx + ux * a * w / 2 + vx * b * d / 2, cy + uy * a * w / 2 + vy * b * d / 2]), h0, h1, col, flatY);
+    const put = (kind, fn) => {
+      const sz = itemSize(kind, r);
+      const at = placeOnRoof(outer, r, sz.w, sz.d, placed, { margin: parapet + 0.7 });
+      if (at) fn(at.x, at.y, sz);
+    };
+    if (plan.stair) put('stair', (x, y, sz) => {
+      const c = wallCol.map((v) => clamp(v * 0.97, 0, 1));
+      box(x, y, sz.w, sz.d, 0, sz.h, c);
+      box(x, y, sz.w + 0.3, sz.d + 0.3, sz.h, sz.h + 0.12, wallCol.map((v) => clamp(v * 1.12, 0, 1))); // slab roof
+      box(x + vx * (sz.d / 2 + 0.02), y + vy * (sz.d / 2 + 0.02), 0.9, 0.06, 0, 2, colArr('#4a4f57')); // door
+    });
+    if (plan.tank) put('tank', (x, y, sz) => {
+      const col = colArr(tankColour(o.roofTank, r()));
+      for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) box(x + ux * a * sz.w * 0.3 + vx * b * sz.d * 0.3, y + uy * a * sz.w * 0.3 + vy * b * sz.d * 0.3, 0.1, 0.1, 0, 0.6, colArr('#555a60'));
+      this._cylinder(batch, x, y, sz.w / 2, topAbs + 0.6, topAbs + sz.h, col);
+      this._cylinder(batch, x, y, sz.w / 2 + 0.05, topAbs + sz.h, topAbs + sz.h + 0.1, col.map((v) => v * 0.8)); // lid rim
+    });
+    for (let i = 0; i < plan.ac; i++) put('ac', (x, y, sz) => {
+      box(x, y, sz.w, sz.d, 0.15, sz.h, colArr('#c9cbcd'));
+      box(x + vx * (sz.d / 2 + 0.015), y + vy * (sz.d / 2 + 0.015), sz.w * 0.72, 0.03, 0.25, sz.h - 0.1, colArr('#4c5158')); // fan grille
+      box(x, y, sz.w * 0.8, sz.d * 0.8, 0, 0.15, colArr('#6b6f75')); // feet
+    });
+    if (plan.mast) put('mast', (x, y, sz) => {
+      const dark = colArr('#4a4d52');
+      box(x, y, 0.08, 0.08, 0, sz.h, dark);
+      for (const [f, w] of [[0.9, 1.2], [0.75, 0.9], [0.6, 0.6]]) box(x, y, w, 0.04, sz.h * f, sz.h * f + 0.04, dark);
+    });
+  }
+
+  /** Upright cylinder (n-sided prism) at local (x, y) between absolute heights y0 and y1. */
+  _cylinder(batch, x, y, rad, y0, y1, col, n = 10) {
+    const P = (k, h) => [x + Math.cos((k / n) * Math.PI * 2) * rad, h, -(y + Math.sin((k / n) * Math.PI * 2) * rad)];
+    for (let k = 0; k < n; k++) {
+      const m = ((k + 0.5) / n) * Math.PI * 2;
+      batch.quad(P(k, y0), P(k + 1, y0), P(k + 1, y1), P(k, y1), [Math.cos(m), 0, -Math.sin(m)], col);
+      batch.tri([x, y1, -y], P(k, y1), P(k + 1, y1), UP, col);
+    }
   }
 
   _wallPick(b, r) {
@@ -2196,6 +2463,25 @@ export class CityRenderer {
     const tact = new Batch(); // tactile paving strips (details, Japan only)
     const yellow = colArr(PAL.tactile);
     const furniture = []; // merged later: poles and signals
+    const poleB = new Batch(); // utility poles (cross-arms, insulators, transformers)
+    const wireB = new Batch(); // overhead wires between poles
+    const vendB = new Batch(); // drink vending machines on the pavement
+    const shopB = new Batch(); // shop awnings and blade signs on the walls
+    const bikeB = new Batch(); // parked bicycles, scooters and motorbikes
+    const birdB = new Batch(); // pigeons and crows
+    const adB = new Batch(); // poster columns and ad panels
+    const junkB = new Batch(); // bins and bags
+    const plateB = new Batch(); // street-name plates
+    const shutB = new Batch(); // window shutters
+    const cafeB = new Batch(); // cafe terraces
+    const hydB = new Batch(); // fire hydrants
+    const signB = new Batch(); // traffic signs and curve mirrors on poles
+    const lampB = new Batch(); // street lamps
+    const plantB = new Batch(); // potted plants and flower boxes
+    const balcB = new Batch(); // balconies and laundry
+    const lightB = new Batch(); // paper lanterns and door curtains
+    const postB = new Batch(); // post boxes
+    if (details && !context) { this.vendingSpots = []; this.shopSpots = []; this.bikeSpots = []; this.signSpots = []; this.plantSpots = []; this.balcSpots = []; this.acSpots = []; this.lightSpots = []; this.postSpots = []; this.scooterSpots = []; this.birdSpots = []; this.adSpots = []; this.rubbishSpots = []; this.plateSpots = []; this.shutterSpots = []; this.cafeSpots = []; this.hydrantSpots = []; }
     const entries = [];
     const juncPts = []; // junctions shared by two or more drawn roads (for railing gaps)
 
@@ -2221,6 +2507,7 @@ export class CityRenderer {
       this._ribbon(asphalt, path, w, 0.07, colArr(major ? PAL.road : PAL.roadMinor), true, heightAt);
     }
 
+    const junctions = details ? findJunctions(entries) : [];
     if (details) {
       for (const e of entries) {
         if (e.foot) continue;
@@ -2233,22 +2520,48 @@ export class CityRenderer {
           }
         }
 
-        // utility poles every ~30 m along residential-type streets
+        // white edge lines along the carriageway, stopping short of every junction
+        if (this.options.edgeLines !== 'off') this._edgeLines(marks, e, path, junctions, white);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._roadCovers(marks, path, e);
+        if (!e.bridge && e.layer <= 0) this._roadPatches(marks, path, e);
+
+        // utility poles (default every 30 m) along residential-type streets, with wires between them
         if (!e.bridge && e.layer <= 0 && RESIDENTIAL_KINDS.has(e.kind) && this.options.detailPoles !== false) {
-          for (const s of samplePoly(path, 30, 15)) {
+          const spacing = clamp(Number(this.options.poleSpacing ?? 30) || 30, 12, 80);
+          const poles = [];
+          for (const s of samplePoly(path, spacing, spacing / 2)) {
             const o = e.w / 2 + 0.8;
             const x = s.x + s.nx * o;
             const y = s.y + s.ny * o;
             if (this._clearOf(x, y)) {
-              furniture.push(this._boxAt(x, y, 0.25, 8, 0.25, 4, PAL.pole));
-              this._lampPts.push([x, y, 8.2]); // lamp bulb on top of the pole (night, lamps on)
+              poles.push({ x, y, nx: s.nx, ny: s.ny, tx: s.tx, ty: s.ty });
+              this._lampPts.push([x, y, POLE_HEIGHT + 0.2]); // lamp bulb on top of the pole (night, lamps on)
             }
           }
+          this._utilityPoles(poleB, wireB, poles, spacing);
         }
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._vendingMachines(vendB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._shopFronts(shopB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._bicycles(bikeB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._scooters(bikeB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._birds(birdB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk' && e.w >= 5) this._posters(adB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._rubbish(junkB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._streetPlates(plateB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._shutters(shutB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._cafes(cafeB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._hydrants(hydB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._roadSigns(signB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk' && e.w >= 5) this._streetLamps(lampB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._planters(plantB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._balconies(balcB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._acUnits(balcB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._shopLights(lightB, path, e);
+        if (!e.bridge && e.layer <= 0 && e.kind !== 'motorway' && e.kind !== 'trunk') this._postBoxes(postB, path, e);
       }
 
       // junctions: signals where a major road meets, a zebra crossing on every leg
-      for (const j of findJunctions(entries)) {
+      for (const j of junctions) {
         juncPts.push([j.x, j.y]);
         if (j.signal && this.options.detailSignals !== false) {
           const spot = this._signalSpot(j, j.roads, entries);
@@ -2262,6 +2575,7 @@ export class CityRenderer {
       }
     }
 
+    if (details) this._curveMirrors(signB, junctions, entries);
     if (details && this.options.detailRails !== false) this._guardRails(entries, juncPts, rails);
 
     const out = [];
@@ -2269,7 +2583,25 @@ export class CityRenderer {
     out.push({ geo: walk.toGeometry(), role: 'sidewalk', name: 'footways' });
     out.push({ geo: asphalt.toGeometry(), role: 'road', name: 'asphalt' });
     out.push({ geo: marks.toGeometry(), role: 'lane', name: 'markings' });
+    if (!poleB.empty) furniture.push(poleB.toGeometry());
+    if (!vendB.empty) furniture.push(vendB.toGeometry());
+    if (!shopB.empty) furniture.push(shopB.toGeometry());
+    if (!bikeB.empty) furniture.push(bikeB.toGeometry());
+    if (!birdB.empty) furniture.push(birdB.toGeometry());
+    if (!adB.empty) furniture.push(adB.toGeometry());
+    if (!junkB.empty) furniture.push(junkB.toGeometry());
+    if (!plateB.empty) furniture.push(plateB.toGeometry());
+    if (!shutB.empty) furniture.push(shutB.toGeometry());
+    if (!cafeB.empty) furniture.push(cafeB.toGeometry());
+    if (!hydB.empty) furniture.push(hydB.toGeometry());
+    if (!signB.empty) furniture.push(signB.toGeometry());
+    if (!lampB.empty) furniture.push(lampB.toGeometry());
+    if (!plantB.empty) furniture.push(plantB.toGeometry());
+    if (!balcB.empty) furniture.push(balcB.toGeometry());
+    if (!lightB.empty) furniture.push(lightB.toGeometry());
+    if (!postB.empty) furniture.push(postB.toGeometry());
     out.push({ geo: this._mergeList(furniture), role: 'detail', name: 'street-furniture' });
+    out.push({ geo: wireB.toGeometry(), role: 'detail', name: 'wires' });
     out.push({ geo: rails.toGeometry(), role: 'detail', name: 'guard-rails' });
     out.push({ geo: tact.toGeometry(), role: 'lane', name: 'tactile' });
     return out;
@@ -2435,6 +2767,1270 @@ export class CityRenderer {
     head.translate(x + ax * armL, h + 4.95, -(y + ay * armL));
     const metal = colArr('#6b6e74');
     return [toBatchable(pole, metal), toBatchable(arm, metal), toBatchable(head, colArr(PAL.signal))];
+  }
+
+  /**
+   * Solid white edge lines 0.35 m in from the kerb on roads 4.5 m or wider, on both sides or one (the
+   * "Edge lines" setting). They stop `w / 2 + 4` m short of any junction so they never run across a side road.
+   */
+  _edgeLines(batch, e, path, junctions, col) {
+    if (e.w < 4.5 || e.bridge || e.layer > 0 || e.kind === 'motorway' || e.kind === 'trunk') return;
+    const sides = this.options.edgeLines === 'one' ? [e.w % 2 < 1 ? 1 : -1] : [-1, 1]; // one side: a fixed but varied choice per road
+    const clear = e.w / 2 + 4;
+    const samples = samplePoly(path, 1.5, 0.5);
+    for (const side of sides) {
+      let run = [];
+      const flush = () => {
+        if (run.length > 1) this._ribbon(batch, run, 0.13, 0.092, col, false, e.heightAt);
+        run = [];
+      };
+      for (const p of samples) {
+        const o = (e.w / 2 - 0.35) * side;
+        const near = junctions.some((j) => Math.abs(j.x - p.x) < clear && Math.abs(j.y - p.y) < clear && Math.hypot(j.x - p.x, j.y - p.y) < clear);
+        if (near) flush();
+        else run.push([p.x + p.nx * o, p.y + p.ny * o]);
+      }
+      flush();
+    }
+  }
+
+  /**
+   * Utility poles at `poles` ({ x, y, nx, ny, tx, ty }: local position, the street-side normal and the road
+   * direction) and the wires between neighbours. Style, wire count, sag and transformers come from the
+   * world settings (see wires.js).
+   */
+  _utilityPoles(poleB, wireB, poles, spacing) {
+    const o = this.options;
+    const look = POLE_LOOK[poleStyleFor(o.poleStyle, this._city && this._city.center)];
+    const H = POLE_HEIGHT;
+    const pole = colArr(look.colour);
+    const arm = colArr(look.arm);
+    const white = colArr(INSULATOR_COLOUR);
+    const slots = wireSlots(o.wireCount ?? 3);
+    const ground = poles.map((p) => this.groundHeight(p.x, p.y));
+    poles.forEach((p, i) => {
+      const g = ground[i];
+      const flat = () => g; // keep arms level on a slope
+      // box in the pole's frame: n across the road (positive = away from the street), t along it
+      const box = (n0, n1, t0, t1, h0, h1, col) => this._prism(poleB, [
+        [p.x + p.nx * n0 + p.tx * t0, p.y + p.ny * n0 + p.ty * t0], [p.x + p.nx * n1 + p.tx * t0, p.y + p.ny * n1 + p.ty * t0],
+        [p.x + p.nx * n1 + p.tx * t1, p.y + p.ny * n1 + p.ty * t1], [p.x + p.nx * n0 + p.tx * t1, p.y + p.ny * n0 + p.ty * t1],
+      ], h0, h1, col, flat);
+      const hw = look.width / 2;
+      box(-hw, hw, -hw, hw, 0, H, pole);
+      // cross-arm across the street side, with a porcelain insulator at each power wire
+      box(-0.95, 0.95, -0.05, 0.05, H - 0.5, H - 0.38, arm);
+      if (slots.length) {
+        for (const s of slots.slice(0, 3)) box(s.across - 0.05, s.across + 0.05, -0.05, 0.05, H - 0.38, H - 0.24, white);
+      }
+      // a lower bracket for the telephone / cable wires
+      if (slots.length > 3) box(-0.6, 0.6, -0.04, 0.04, H - 1.32, H - 1.24, arm);
+      const u = rng(hashStr(`pole:${p.x.toFixed(1)}:${p.y.toFixed(1)}`))();
+      if (hasTransformer(o.poleTransformers ?? 20, u)) box(hw, hw + 0.5, -0.25, 0.25, H - 2.1, H - 1.15, colArr(TRANSFORMER_COLOUR));
+    });
+    if (!slots.length) return;
+    const wire = colArr(WIRE_COLOUR);
+    const r = Math.max(0.01, Number(o.wireThickness ?? 0.035));
+    for (const [a, b] of wireSpans(poles, spacing * 1.6)) {
+      const A = poles[a];
+      const B = poles[b];
+      const len = Math.hypot(B.x - A.x, B.y - A.y);
+      const sag = spanSag(o.wireSag ?? 0.5, len);
+      for (const s of slots) {
+        const pa = [A.x - A.nx * s.across, ground[a] + H - s.down, -(A.y - A.ny * s.across)];
+        const pb = [B.x - B.nx * s.across, ground[b] + H - s.down, -(B.y - B.ny * s.across)];
+        const pts = catenary(pa, pb, sag, Math.ceil(len / 2.5));
+        for (let i = 0; i + 1 < pts.length; i++) this._tube(wireB, pts[i], pts[i + 1], r, wire);
+      }
+    }
+  }
+
+  /**
+   * Drink vending machines along a street: groups of one to three, facing the road from the building side of
+   * the pavement. How many comes from the place (vendingSpacing) and the "Vending machines" slider.
+   */
+  _vendingMachines(batch, path, e) {
+    const o = this.options;
+    const spacing = vendingSpacing(this._city && this._city.center);
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    const every = 10;
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`vend:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      if (r() >= vendingChance(o.vendingDensity ?? 30, spacing, every) / 2) continue; // half the chance on each side
+      // stand against the nearest wall on the chosen side of the street, facing away from it
+      const off = e.w / 2 + 1.4;
+      const wall = nearestWall(walls, s.x + s.nx * off * side, s.y + s.ny * off * side, 9);
+      if (!wall) continue;
+      const fx = wall.nx;
+      const fy = wall.ny;
+      const cx = wall.qx + fx * 0.36;
+      const cy = wall.qy + fy * 0.36;
+      let gap = Infinity; // distance to the carriageway edge
+      for (let i = 0; i + 1 < path.length; i++) gap = Math.min(gap, distToSegment(cx, cy, path[i], path[i + 1]));
+      if (gap < e.w / 2 + 0.7 || !this._clearOf(cx, cy, 1.5)) continue;
+      const tx = -fy;
+      const ty = fx;
+      const colour = vendingColour(o.vendingColour, r());
+      const count = vendingGroupSize(r());
+      const g = this.groundHeight(cx, cy);
+      this.vendingSpots?.push([cx, cy, fx, fy]); // where the groups stand (local metres) and which way they face
+      for (let k = 0; k < count; k++) {
+        const along = (k - (count - 1) / 2) * (VENDING_WIDTH + 0.06);
+        const mx = cx + tx * along;
+        const my = cy + ty * along;
+        if (insideBuilding(walls, mx, my)) continue;
+        const body = k && o.vendingColour === 'mixed' ? vendingColour('mixed', r()) : colour;
+        const hex = { body, trim: mixHex(body, '#000000', 0.45), panel: '#f6f2dd', slot: '#17181b' };
+        for (const p of vendingParts(r)) {
+          const col = colArr(p.role === 'drink' ? DRINK_COLOURS[p.slot] : hex[p.role]);
+          this._prism(batch, [[p.u0, p.v0], [p.u1, p.v0], [p.u1, p.v1], [p.u0, p.v1]].map(([u, v]) => [mx + u * fx + v * tx, my + u * fy + v * ty]), p.h0, p.h1, col, () => g);
+        }
+      }
+    }
+  }
+
+  /**
+   * Shop awnings and blade signs on the walls that face a street. How many comes from the place
+   * (awningSpacing / signSpacing) and the two density sliders; awnings keep to wall runs wide enough for them.
+   */
+  _shopFronts(batch, path, e) {
+    const o = this.options;
+    const centre = this._city && this._city.center;
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    const every = 8;
+    const aChance = shopChance(o.awningDensity ?? 35, awningSpacing(centre), every) / 2; // per side
+    const sChance = shopChance(o.signDensity ?? 30, signSpacing(centre), every) / 2;
+    if (aChance <= 0 && sChance <= 0) return;
+    const depth = clamp(Number(o.awningDepth ?? 1.2) || 1.2, 0.6, 2.4);
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`shop:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      const wantAwning = r() < aChance;
+      const wantSign = r() < sChance;
+      const uA = r();
+      const uC = r();
+      const uS = r();
+      if (!wantAwning && !wantSign) continue;
+      const off = e.w / 2 + 1.4;
+      const wall = nearestWall(walls, s.x + s.nx * off * side, s.y + s.ny * off * side, 9);
+      if (!wall || wall.height < 4.5) continue;
+      const fx = wall.nx;
+      const fy = wall.ny;
+      const tx = -fy;
+      const ty = fx;
+      // the wall must run straight on both sides of the spot, or the awning would hang past a corner
+      const run = (dir) => {
+        let n = 0;
+        while (n < 2.5) {
+          const w2 = nearestWall(walls, wall.qx + fx * 0.15 + tx * dir * (n + 0.5), wall.qy + fy * 0.15 + ty * dir * (n + 0.5), 0.35);
+          if (!w2 || w2.nx * fx + w2.ny * fy < 0.97) break;
+          n += 0.5;
+        }
+        return n;
+      };
+      const room = Math.min(run(1), run(-1)) * 2;
+      let gap = Infinity; // distance to the carriageway edge
+      for (let i = 0; i + 1 < path.length; i++) gap = Math.min(gap, distToSegment(wall.qx, wall.qy, path[i], path[i + 1]));
+      gap -= e.w / 2;
+      if (gap < 0.9) continue;
+      const g = this.groundHeight(wall.qx, wall.qy);
+      const place = (u, v, h) => [wall.qx + fx * v + tx * u, g + h, -(wall.qy + fy * v + ty * u)];
+      const emit = (parts, colours) => {
+        for (const p of parts) {
+          const q = p.quad.map(([u, v, h]) => place(u, v, h));
+          const nrm = p.role === 'under' ? [0, -1, 0] : [fx, 0.4, -fy];
+          const both = p.role === 'board' || p.role === 'frame' || p.role === 'arm' || p.role === 'text';
+          const hint = both ? [tx, 0, -ty] : nrm;
+          batch.quad(q[0], q[1], q[2], q[3], hint, colArr(colours[p.role]));
+          if (both) batch.quad(q[0], q[1], q[2], q[3], [-hint[0], 0, -hint[2]], colArr(colours[p.role])); // seen from both sides
+        }
+      };
+      if (wantAwning) {
+        const width = awningWidth(uA, room);
+        const d = Math.min(depth, gap - 0.4);
+        if (width && d >= 0.6) {
+          const base = awningColour(o.awningColour, uC);
+          this.shopSpots?.push([wall.qx, wall.qy, fx, fy, 'awning']);
+          emit(awningParts({ width, depth: d, top: 3.1, stripes: Math.max(2, Math.round(width * 2)) }), {
+            cloth: base, alt: mixHex(base, '#f6f1e4', 0.82), under: mixHex(base, '#000000', 0.55),
+          });
+          continue; // an awning takes the shop front; the sign goes on the neighbouring spots
+        }
+      }
+      if (wantSign && room >= 1 && wall.height >= 6 && gap >= 1.6) {
+        const board = signColour(uS);
+        this.shopSpots?.push([wall.qx, wall.qy, fx, fy, 'sign']);
+        emit(signParts({ width: 0.7, height: 0.9 + 1.0 * uC, out: 0.85, top: 3.7 + 1.1 * uA }), {
+          arm: '#3a3d42', frame: '#3a3d42', board, text: mixHex(board, '#14161a', 0.78),
+        });
+      }
+    }
+  }
+
+  /**
+   * Flat painted shapes (a sign face, a mirror) facing (fx, fy): `shapes` are { pts, col } in the sign's own plane,
+   * scaled by `rad` and centred at local (x, y), `h` metres up. Layers are lifted a hair apart so they never fight.
+   */
+  _flatShapes(batch, shapes, x, y, h, fx, fy, rad) {
+    const px = -fy;
+    const py = fx;
+    const hint = [fx, 0, -fy];
+    shapes.forEach((sh, layer) => {
+      const lift = 0.004 * layer;
+      const at = ([a, b]) => [x + px * a * rad + fx * lift, h + b * rad, -(y + py * a * rad + fy * lift)];
+      const { pts, tris } = triangulate(sh.pts, []);
+      const col = colArr(sh.col);
+      for (const t of tris) {
+        const A = pts[t[0]];
+        const B = pts[t[1]];
+        const C = pts[t[2]];
+        batch.tri(at([A.x, A.y]), at([B.x, B.y]), at([C.x, C.y]), hint, col);
+      }
+    });
+  }
+
+  /** A traffic sign on a pole: the pole, a grey back and the painted face turned to oncoming traffic. */
+  _signOnPole(batch, x, y, fx, fy, kind, style, rad = 0.3) {
+    const g = this.groundHeight(x, y);
+    this.signSpots?.push([x, y, fx, fy, kind]);
+    const top = 2.5 + rad;
+    this._tube(batch, [x, g, -y], [x, g + top, -y], 0.04, colArr(SIGN_POLE));
+    const shapes = signShapes(kind, style);
+    this._flatShapes(batch, [{ pts: shapes[0].pts, col: SIGN_POLE }], x - fx * 0.05, y - fy * 0.05, g + 2.5, -fx, -fy, rad * 1.02); // the back
+    this._flatShapes(batch, shapes, x + fx * 0.05, y + fy * 0.05, g + 2.5, fx, fy, rad);
+  }
+
+  /**
+   * Flat painted shapes lying on the ground at local (x, y), `h` metres above the ground, turned so the shape's y runs
+   * along the unit vector (ax, ay). Each { pts, shade } is drawn in `tone` scaled by its shade, a hair above the last.
+   */
+  _groundShapes(batch, shapes, x, y, ax, ay, h, tone, heightAt) {
+    const g = heightAt ? heightAt(x, y) : this.groundHeight(x, y);
+    const bx = ay; // the shape's x runs across
+    const by = -ax;
+    const base = Array.isArray(tone) ? tone : colArr(tone);
+    shapes.forEach((sh, layer) => {
+      const col = base.map((v) => clamp(v * sh.shade, 0, 1));
+      const at = ([u, v]) => [x + bx * u + ax * v, g + h + 0.002 * layer, -(y + by * u + ay * v)];
+      const { pts, tris } = triangulate(sh.pts, []);
+      for (const t of tris) batch.tri(at([pts[t[0]].x, pts[t[0]].y]), at([pts[t[1]].x, pts[t[1]].y]), at([pts[t[2]].x, pts[t[2]].y]), UP, col);
+    });
+  }
+
+  /**
+   * Manhole covers in the lanes, drain grates at the kerb and utility plates on the pavement along a street (the
+   * "Manholes and drains" slider, size and colour; see roadcovers.js).
+   */
+  _roadCovers(batch, path, e) {
+    const o = this.options;
+    const density = o.coverDensity ?? 50;
+    if (!(density > 0)) return;
+    const every = 8;
+    const size = Number(o.coverSize ?? 1) || 1;
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    for (const s of samplePoly(path, every, every / 2)) {
+      const r = rng(hashStr(`cover:${s.x.toFixed(1)}:${s.y.toFixed(1)}`));
+      const tone = coverTone(o.coverTone, r());
+      if (r() < coverChance(density, COVER_SPACING.manhole, every)) {
+        const off = manholeOffset(r(), e.w);
+        const x = s.x + s.nx * off;
+        const y = s.y + s.ny * off;
+        this._groundShapes(batch, coverShapes('manhole', size), x, y, s.tx, s.ty, 0.1, tone, e.heightAt);
+      }
+      const side = r() < 0.5 ? 1 : -1;
+      if (e.w >= 5 && r() < coverChance(density, COVER_SPACING.drain, every)) {
+        const off = e.w / 2 - 0.3; // in the gutter, long side along the kerb
+        this._groundShapes(batch, coverShapes('drain', size), s.x + s.nx * off * side, s.y + s.ny * off * side, s.tx, s.ty, 0.1, tone, e.heightAt);
+      }
+      if (r() < coverChance(density, COVER_SPACING.plate, every)) {
+        const off = e.w / 2 + 1.6;
+        const x = s.x + s.nx * off * -side;
+        const y = s.y + s.ny * off * -side;
+        if (!insideBuilding(walls, x, y)) this._groundShapes(batch, coverShapes('plate', size), x, y, s.tx, s.ty, 0.075, tone, e.heightAt);
+      }
+    }
+  }
+
+  /**
+   * Repair patches and cracks in the carriageway: thin raised geometry, so the line pass inks round them (a texture
+   * would vanish in the cel pass). Amounts from the "Road patches" and "Road cracks" sliders.
+   */
+  _roadPatches(batch, path, e) {
+    const o = this.options;
+    const pd = o.patchDensity ?? 40;
+    const cd = o.crackDensity ?? 40;
+    if (!(pd > 0) && !(cd > 0) && !((o.wetStreets ?? 0) > 0)) return;
+    const every = 8;
+    const road = colArr(e.major ? PAL.road : PAL.roadMinor);
+    for (const s of samplePoly(path, every, every / 2)) {
+      const r = rng(hashStr(`patch:${s.x.toFixed(1)}:${s.y.toFixed(1)}`));
+      const half = Math.max(0.5, e.w / 2 - 0.9);
+      if (r() < patchChance(pd, PATCH_SPACING, every)) {
+        const { w, d } = patchSize(r(), r(), o.patchSize);
+        const off = (r() * 2 - 1) * Math.max(0, half - w / 2);
+        const turn = (r() - 0.5) * 0.5;
+        const ax = s.tx * Math.cos(turn) - s.ty * Math.sin(turn);
+        const ay = s.tx * Math.sin(turn) + s.ty * Math.cos(turn);
+        const shade = patchShade(r());
+        const tone = road.map((v) => clamp(v * shade, 0, 1));
+        this._groundShapes(batch, [{ pts: patchPolygon(r, w, d), shade: 1 }], s.x + s.nx * off, s.y + s.ny * off, ax, ay, 0.082, tone, e.heightAt);
+      }
+      if (r() < patchChance(cd, CRACK_SPACING, every)) {
+        const off = (r() * 2 - 1) * half;
+        const pts = crackPoints(r, 1.5 + r() * 3.5).map(([u, v]) => [s.x + s.nx * (off + u) + s.tx * (v - 1.5), s.y + s.ny * (off + u) + s.ty * (v - 1.5)]);
+        this._ribbon(batch, pts, 0.05, 0.086, road.map((v) => v * 0.4), false, e.heightAt);
+      }
+      if (r() < puddleChance(o.wetStreets ?? 0, every)) {
+        const { w, d } = puddleSize(r(), r(), o.puddleSize);
+        const side = r() < 0.5 ? 1 : -1;
+        const off = side * Math.max(0, half - 0.2 - r() * Math.min(1.8, half));
+        const sky = colArr(r() < 0.5 ? '#a8c6de' : '#bfd4e6');
+        this._groundShapes(batch, [{ pts: puddlePolygon(r, w, d), shade: 1 }], s.x + s.nx * off, s.y + s.ny * off, s.tx, s.ty, 0.088, sky, e.heightAt);
+      }
+    }
+  }
+
+  /**
+   * Street lamps along a street, alternating sides: how many from the "Street lamps" slider, the design from the
+   * style (see lamps.js). Each also gets a night glow point.
+   */
+  _streetLamps(batch, path, e) {
+    const o = this.options;
+    const centre = this._city && this._city.center;
+    const style = lampStyleFor(o.lampStyle, centre);
+    const every = 10;
+    const chance = lampChance(o.lampDensity ?? 40, lampSpacing(style), every) / 2;
+    if (chance <= 0) return;
+    const top = lampHeight(style, o.lampHeight);
+    const parts = lampParts(style, top);
+    const pole = colArr(LAMP_POLE[style]);
+    const cols = { pole, head: pole.map((v) => v * 0.8), glass: colArr(LAMP_GLASS) };
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`lamp:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      if (r() >= chance) continue;
+      const off = e.w / 2 + 0.6;
+      const x = s.x + s.nx * off * side;
+      const y = s.y + s.ny * off * side;
+      if (!this._clearOf(x, y, 1.5) || insideBuilding(walls, x, y)) continue;
+      const ux = -s.nx * side; // from the pole towards the street
+      const uy = -s.ny * side;
+      const vx = -uy;
+      const vy = ux;
+      const g = this.groundHeight(x, y);
+      const P = (u, h, v) => [x + ux * u + vx * v, g + h, -(y + uy * u + vy * v)];
+      for (const t of parts.tubes) this._tube(batch, P(...t.a), P(...t.b), t.r, cols[t.role]);
+      for (const b of parts.boxes) {
+        const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => [x + ux * u + vx * v, y + uy * u + vy * v]);
+        this._prism(batch, q, b.h0, b.h1, cols[b.role], () => g);
+      }
+      this._lampPts.push([x + ux * parts.bulb[0], y + uy * parts.bulb[0], parts.bulb[1]]); // the lamp glows at night
+    }
+  }
+
+  /** A squashed icosahedron blob (leaves, flowers) centred at a world point, radius `rad`, vertical scale `sy`. */
+  _blob(batch, cx, cy, cz, rad, sy, col) {
+    const base = (this._blobBase ||= new THREE.IcosahedronGeometry(1, 1).toNonIndexed().attributes.position.array);
+    for (let i = 0; i < base.length; i += 9) {
+      const v = [0, 1, 2].map((k) => [cx + base[i + k * 3] * rad, cy + base[i + k * 3 + 1] * rad * sy, cz + base[i + k * 3 + 2] * rad]);
+      const mx = (base[i] + base[i + 3] + base[i + 6]) / 3;
+      const my = (base[i + 1] + base[i + 4] + base[i + 7]) / 3;
+      const mz = (base[i + 2] + base[i + 5] + base[i + 8]) / 3;
+      batch.tri(v[0], v[1], v[2], [mx, my, mz], col);
+    }
+  }
+
+  /**
+   * Potted plants, flower boxes and tubs standing against the building fronts, singly or in a row. How many comes from
+   * the place (planterSpacing) and the "Potted plants" slider; type, flower colour and size have their own controls.
+   */
+  _planters(batch, path, e) {
+    const o = this.options;
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    const every = 8;
+    const chance = planterChance(o.planterDensity ?? 30, planterSpacing(this._city && this._city.center), every) / 2;
+    if (chance <= 0) return;
+    const size = Number(o.planterSize ?? 1) || 1;
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`plant:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      if (r() >= chance) continue;
+      const off = e.w / 2 + 1.4;
+      const wall = nearestWall(walls, s.x + s.nx * off * side, s.y + s.ny * off * side, 9);
+      if (!wall || wall.height < 3) continue;
+      const fx = wall.nx;
+      const fy = wall.ny;
+      const tx = -fy;
+      const ty = fx;
+      const kind = planterKind(o.planterStyle, r());
+      const count = planterCount(kind, r());
+      const flower = flowerColour(o.planterColour, r());
+      const step = planterWidth(kind) * size + 0.1;
+      const cx = wall.qx + fx * 0.3 * size;
+      const cy = wall.qy + fy * 0.3 * size;
+      let gap = Infinity; // distance to the carriageway edge
+      for (let i = 0; i + 1 < path.length; i++) gap = Math.min(gap, distToSegment(cx, cy, path[i], path[i + 1]));
+      if (gap - e.w / 2 < 0.8 || !this._clearOf(cx, cy, 1.5)) continue;
+      for (let k = 0; k < count; k++) {
+        const along = (k - (count - 1) / 2) * step;
+        const bx = cx + tx * along;
+        const by = cy + ty * along;
+        if (insideBuilding(walls, bx, by)) continue;
+        const g = this.groundHeight(bx, by);
+        this.plantSpots?.push([bx, by, fx, fy, kind]);
+        const parts = planterParts(kind, size, r);
+        const frame = (u, v) => [bx + tx * u + fx * v, by + ty * u + fy * v];
+        for (const b of parts.boxes) {
+          const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => frame(u, v));
+          this._prism(batch, q, b.h0, b.h1, colArr(POT_COLOURS[b.role]), () => g);
+        }
+        const leaf = LEAF_COLOURS[Math.floor(r() * LEAF_COLOURS.length)];
+        for (const bl of parts.blobs) {
+          const [px, py] = frame(bl.u, bl.v);
+          const col = colArr(bl.role === 'flower' ? flower : leaf);
+          this._blob(batch, px, g + bl.h, -py, bl.r, bl.sy, col);
+        }
+      }
+    }
+  }
+
+  /**
+   * Balconies stacked on street-facing walls (Japanese apartment blocks have the most), each with a railing or a solid
+   * parapet and, by the laundry slider, a drying pole with washing and the odd futon over the rail. Only walls that run
+   * along the world axes get them, so they line up with the window grid of the building shader.
+   */
+  _balconies(batch, path, e) {
+    const o = this.options;
+    const centre = this._city && this._city.center;
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    const every = 12;
+    const chance = balconyChance(o.balconyDensity ?? 35, balconySpacing(centre), every) / 2;
+    if (chance <= 0) return;
+    const style = balconyStyleFor(o.balconyStyle, centre);
+    const width = clamp(Number(o.balconyWidth ?? 2) || 2, 1.2, 3);
+    const cols = Object.fromEntries(Object.entries(BALCONY_COLOURS).map(([k, v]) => [k, colArr(v)]));
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`balc:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      if (r() >= chance) continue;
+      const off = e.w / 2 + 1.4;
+      const wall = nearestWall(walls, s.x + s.nx * off * side, s.y + s.ny * off * side, 10);
+      if (!wall || wall.height < 9) continue;
+      const alongX = Math.abs(wall.ny) > 0.97; // wall runs along x, its windows are numbered by world x
+      const alongY = Math.abs(wall.nx) > 0.97; // wall runs along y, numbered by world z (= -y)
+      if (!alongX && !alongY) continue;
+      // centre of the window column nearest the wall point
+      const cx = alongX ? columnCentre(wall.qx) : wall.qx;
+      const cy = alongY ? -columnCentre(-wall.qy) : wall.qy;
+      const fx = alongX ? 0 : Math.sign(wall.nx);
+      const fy = alongX ? Math.sign(wall.ny) : 0;
+      const tx = -fy;
+      const ty = fx;
+      // the wall has to run straight on both sides of the balcony, and the street has to be clear below it
+      const straight = [-1, 1].every((dir) => {
+        const w2 = nearestWall(walls, cx + fx * 0.15 + tx * dir * (width / 2 + 0.2), cy + fy * 0.15 + ty * dir * (width / 2 + 0.2), 0.35);
+        return w2 && w2.nx * fx + w2.ny * fy > 0.97;
+      });
+      let gap = Infinity; // distance to the carriageway edge
+      for (let i = 0; i + 1 < path.length; i++) gap = Math.min(gap, distToSegment(cx, cy, path[i], path[i + 1]));
+      if (!straight || gap - e.w / 2 < 0.8) continue;
+      const g = this.groundHeight(cx, cy);
+      const frame = (u, v) => [cx + tx * u + fx * v, cy + ty * u + fy * v];
+      const flat = () => g;
+      this.balcSpots?.push([cx, cy, fx, fy]);
+      for (const slab of slabHeights(g, wall.height, r, 0.7)) {
+        const base = slab - g;
+        for (const b of balconyParts(style, width)) {
+          const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => frame(u, v));
+          this._prism(batch, q, base + b.h0, base + b.h1, cols[b.role], flat);
+        }
+        for (const it of laundryItems(o.laundryAmount ?? 50, width, r)) {
+          const v0 = it.role === 'pole' ? 0.5 : it.v - 0.02;
+          const v1 = it.role === 'pole' ? 0.55 : it.v + 0.02;
+          const q = [[it.u0, v0], [it.u1, v0], [it.u1, v1], [it.u0, v1]].map(([u, v]) => frame(u, v));
+          this._prism(batch, q, base + it.h0, base + it.h1, colArr(it.colour), flat);
+        }
+      }
+    }
+  }
+
+  /**
+   * Air-conditioner outdoor units hung on the walls between the windows (the "Wall air-conditioners" slider; Asian
+   * apartment blocks are covered in them). Like the balconies they only go on walls that run along the world axes.
+   */
+  _acUnits(batch, path, e) {
+    const o = this.options;
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    const every = 9;
+    const chance = acChance(o.acDensity ?? 30, acSpacing(this._city && this._city.center), every) / 2;
+    if (chance <= 0) return;
+    const size = Number(o.acSize ?? 1) || 1;
+    const dark = colArr('#33363b');
+    const metal = colArr('#6f7378');
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`ac:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      if (r() >= chance) continue;
+      const off = e.w / 2 + 1.4;
+      const wall = nearestWall(walls, s.x + s.nx * off * side, s.y + s.ny * off * side, 10);
+      if (!wall || wall.height < 7) continue;
+      const alongX = Math.abs(wall.ny) > 0.97;
+      const alongY = Math.abs(wall.nx) > 0.97;
+      if (!alongX && !alongY) continue;
+      const cx = alongX ? gapCentre(wall.qx) : wall.qx;
+      const cy = alongY ? -gapCentre(-wall.qy) : wall.qy;
+      const fx = alongX ? 0 : Math.sign(wall.nx);
+      const fy = alongX ? Math.sign(wall.ny) : 0;
+      const tx = -fy;
+      const ty = fx;
+      const straight = [-1, 1].every((dir) => {
+        const w2 = nearestWall(walls, cx + fx * 0.15 + tx * dir * 0.6, cy + fy * 0.15 + ty * dir * 0.6, 0.35);
+        return w2 && w2.nx * fx + w2.ny * fy > 0.97;
+      });
+      let gap = Infinity; // distance to the carriageway edge
+      for (let i = 0; i + 1 < path.length; i++) gap = Math.min(gap, distToSegment(cx, cy, path[i], path[i + 1]));
+      if (!straight || gap - e.w / 2 < 0.8) continue;
+      const g = this.groundHeight(cx, cy);
+      const casing = colArr(acTone(o.acTone, r()));
+      const cols = { casing, grille: dark, bracket: metal, pipe: metal };
+      const frame = (u, v) => [cx + tx * u + fx * v, cy + ty * u + fy * v];
+      for (const base of unitHeights(g, wall.height, r, 0.6)) {
+        this.acSpots?.push([cx, cy, fx, fy, base]);
+        for (const b of acParts(size)) {
+          const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => frame(u, v));
+          this._prism(batch, q, base - g + b.h0, base - g + b.h1, cols[b.role], () => g);
+        }
+      }
+    }
+  }
+
+  /**
+   * Paper lanterns hung beside shop doors and noren curtains over them, on street-facing walls (the "Paper lanterns" and
+   * "Door curtains" sliders; Japanese shopping alleys are strung with them, see lanterns.js).
+   */
+  _shopLights(batch, path, e) {
+    const o = this.options;
+    const spacing = lanternSpacing(this._city && this._city.center);
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    const every = 8;
+    const pL = lanternChance(o.lanternDensity ?? 30, spacing, every) / 2;
+    const pN = lanternChance(o.norenDensity ?? 30, spacing * 1.2, every) / 2;
+    if (pL <= 0 && pN <= 0) return;
+    const size = Number(o.lanternSize ?? 1) || 1;
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`lant:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      const wantL = r() < pL;
+      const wantN = r() < pN;
+      if (!wantL && !wantN) continue;
+      const off = e.w / 2 + 1.4;
+      const wall = nearestWall(walls, s.x + s.nx * off * side, s.y + s.ny * off * side, 9);
+      if (!wall || wall.height < 3.5) continue;
+      const fx = wall.nx;
+      const fy = wall.ny;
+      const tx = -fy;
+      const ty = fx;
+      let gap = Infinity; // distance to the carriageway edge
+      for (let i = 0; i + 1 < path.length; i++) gap = Math.min(gap, distToSegment(wall.qx, wall.qy, path[i], path[i + 1]));
+      if (gap - e.w / 2 < 0.8) continue;
+      // the wall has to run straight for the width of the doorway
+      const straight = [-1, 1].every((dir) => {
+        const w2 = nearestWall(walls, wall.qx + fx * 0.15 + tx * dir * 1.2, wall.qy + fy * 0.15 + ty * dir * 1.2, 0.35);
+        return w2 && w2.nx * fx + w2.ny * fy > 0.97;
+      });
+      if (!straight) continue;
+      const g = this.groundHeight(wall.qx, wall.qy);
+      this.lightSpots?.push([wall.qx, wall.qy, fx, fy, wantL, wantN]);
+      const frame = (u, v) => [wall.qx + tx * u + fx * v, wall.qy + ty * u + fy * v];
+      const box = (b, col) => this._prism(batch, [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => frame(u, v)), b.h0, b.h1, col, () => g);
+      if (wantN) {
+        const cloth = colArr(NOREN_COLOURS[Math.floor(r() * NOREN_COLOURS.length)]);
+        const cols = { cloth, band: colArr('#ece7d8'), rod: colArr('#3a3430') };
+        for (const b of norenParts(1.2, 2.15, 0.7, 3)) box(b, cols[b.role]);
+      }
+      if (wantL) {
+        const n = lanternCount(r());
+        const tone = colArr(lanternColour(o.lanternColour, r()));
+        const p = lanternParts(size);
+        for (let k = 0; k < n; k++) {
+          const u = wantN ? 1.0 + k * 0.5 : (k - (n - 1) / 2) * 0.55; // beside a doorway curtain, else a row on its own
+          const cols = { dark: colArr('#2b2724'), arm: colArr('#3a3d42'), label: colArr(tone[0] > 0.6 && tone[1] > 0.6 ? '#2b2724' : '#f1ece0') };
+          for (const b of p.boxes) box({ ...b, u0: b.u0 + u, u1: b.u1 + u }, cols[b.role]);
+          const [bx, by] = frame(u, p.blob.v);
+          this._blob(batch, bx, g + p.blob.h, -by, p.blob.r, p.blob.sy, tone);
+        }
+      }
+    }
+  }
+
+  /**
+   * Post boxes on the pavement: a red cylinder in Japan and Korea, a yellow box in France, a pillar box elsewhere
+   * (the "Post boxes" slider, design and size; see postboxes.js). They stand by the kerb with the slot facing away from the road.
+   */
+  _postBoxes(batch, path, e) {
+    const o = this.options;
+    const centre = this._city && this._city.center;
+    const every = 10;
+    const chance = postboxChance(o.postboxDensity ?? 20, postboxSpacing(centre), every) / 2;
+    if (chance <= 0) return;
+    const style = postboxStyleFor(o.postboxStyle, centre);
+    const hex = postboxColour(style, centre);
+    const size = Number(o.postboxSize ?? 1) || 1;
+    const parts = postboxParts(style, size);
+    const cols = { body: colArr(hex), trim: colArr('#2b2d31'), slot: colArr('#101114'), plate: colArr('#f1efe6') };
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`post:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      if (r() >= chance) continue;
+      const off = e.w / 2 + 0.9;
+      const x = s.x + s.nx * off * side;
+      const y = s.y + s.ny * off * side;
+      if (!this._clearOf(x, y, 1.5) || insideBuilding(walls, x, y)) continue;
+      const fx = s.nx * side; // the slot faces the pavement, away from the road
+      const fy = s.ny * side;
+      const tx = -fy;
+      const ty = fx;
+      const g = this.groundHeight(x, y);
+      this.postSpots?.push([x, y, fx, fy, style]);
+      if (parts.cyl) this._cylinder(batch, x, y, parts.cyl.r, g + parts.cyl.h0, g + parts.cyl.h1, cols.body, 14);
+      for (const b of parts.boxes) {
+        const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => [x + tx * u + fx * v, y + ty * u + fy * v]);
+        this._prism(batch, q, b.h0, b.h1, cols[b.role], () => g);
+      }
+    }
+  }
+
+  /** Traffic signs along a street: one side at a time, facing oncoming traffic. How many: the "Traffic signs" slider. */
+  _roadSigns(batch, path, e) {
+    const o = this.options;
+    const centre = this._city && this._city.center;
+    const every = 10;
+    const chance = roadSignChance(o.roadSignDensity ?? 35, roadSignSpacing(centre), every) / 2;
+    if (chance <= 0) return;
+    const style = roadSignStyle(o.roadSignStyle, centre);
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`rsign:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      if (r() >= chance) continue;
+      const off = e.w / 2 + 0.7;
+      const x = s.x + s.nx * off * side;
+      const y = s.y + s.ny * off * side;
+      if (!this._clearOf(x, y, 1.5) || insideBuilding(walls, x, y)) continue;
+      const dir = r() < 0.5 ? 1 : -1;
+      this._signOnPole(batch, x, y, s.tx * dir, s.ty * dir, roadSignKind(style, r()), style);
+    }
+  }
+
+  /** Orange-poled curve mirrors at junctions (Japan and Korea): two round mirrors on a pole at a corner, turned to the junction. */
+  _curveMirrors(batch, junctions, entries) {
+    const o = this.options;
+    const centre = this._city && this._city.center;
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    const rim = { pts: Array.from({ length: 16 }, (_, i) => [Math.cos((i / 16) * 6.2832), Math.sin((i / 16) * 6.2832)]), col: MIRROR_POLE };
+    const glass = { pts: rim.pts.map(([a, b]) => [a * 0.84, b * 0.84]), col: '#a9cfe2' };
+    for (const j of junctions) {
+      const r = rng(hashStr(`mirror:${j.x.toFixed(1)}:${j.y.toFixed(1)}`));
+      if (!hasCurveMirror(o.mirrorDensity ?? 60, centre, r()) || j.legs.length < 3) continue;
+      const leg = j.legs[Math.floor(r() * j.legs.length)];
+      const sgn = r() < 0.5 ? 1 : -1;
+      const x = leg.px + leg.ux * (leg.w / 2 + 2.5) - leg.uy * sgn * (leg.w / 2 + 0.8);
+      const y = leg.py + leg.uy * (leg.w / 2 + 2.5) + leg.ux * sgn * (leg.w / 2 + 0.8);
+      if (!this._clearOf(x, y, 1.5) || insideBuilding(walls, x, y)) continue;
+      let fx = j.x - x;
+      let fy = j.y - y;
+      const L = Math.hypot(fx, fy) || 1;
+      fx /= L;
+      fy /= L;
+      const g = this.groundHeight(x, y);
+      this.signSpots?.push([x, y, fx, fy, 'mirror']);
+      this._tube(batch, [x, g, -y], [x, g + 3.7, -y], 0.05, colArr(MIRROR_POLE));
+      for (const dh of [2.4, 3.15]) {
+        this._flatShapes(batch, [{ pts: rim.pts, col: MIRROR_POLE }], x - fx * 0.05, y - fy * 0.05, g + dh, -fx, -fy, 0.36); // back
+        this._flatShapes(batch, [rim, glass], x + fx * 0.05, y + fy * 0.05, g + dh, fx, fy, 0.36);
+      }
+    }
+  }
+
+  /**
+   * Parked bicycles on the pavement: one leaning along a wall, or a row or rack of them nose-in. How many comes
+   * from the place (bikeSpacing) and the "Parked bicycles" slider.
+   */
+  _bicycles(batch, path, e) {
+    const o = this.options;
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    const every = 10;
+    const chance = bikeChance(o.bikeDensity ?? 30, bikeSpacing(this._city && this._city.center), every) / 2;
+    if (chance <= 0) return;
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`bike:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      if (r() >= chance) continue;
+      const off = e.w / 2 + 1.4;
+      const wall = nearestWall(walls, s.x + s.nx * off * side, s.y + s.ny * off * side, 9);
+      if (!wall) continue;
+      const fx = wall.nx;
+      const fy = wall.ny;
+      const grp = bikeGroup(r());
+      const style = bikeStyle(o.bikeStyle, r());
+      const colour = bikeColour(o.bikeColour, r());
+      const sx = r() < 0.5 ? 1 : -1; // which way a lone bike points along the wall
+      const cx = wall.qx + fx * (grp.row ? 0.95 : 0.55);
+      const cy = wall.qy + fy * (grp.row ? 0.95 : 0.55);
+      let gap = Infinity; // distance to the carriageway edge
+      for (let i = 0; i + 1 < path.length; i++) gap = Math.min(gap, distToSegment(cx, cy, path[i], path[i + 1]));
+      if (gap - e.w / 2 < (grp.row ? 1.5 : 1) || !this._clearOf(cx, cy, 1.5)) continue;
+      const tx = -fy;
+      const ty = fx;
+      for (let k = 0; k < grp.count; k++) {
+        const along = (k - (grp.count - 1) / 2) * 0.62;
+        const bx = cx + (grp.row ? tx * along : 0);
+        const by = cy + (grp.row ? ty * along : 0);
+        if (insideBuilding(walls, bx, by)) continue;
+        // a lone bike lies along the wall; in a row each stands nose to the wall, front towards the street or the wall by turns
+        const ax = grp.row ? fx * (k % 2 ? -1 : 1) : tx * sx;
+        const ay = grp.row ? fy * (k % 2 ? -1 : 1) : ty * sx;
+        this._bicycle(batch, bx, by, ax, ay, style, o.bikeColour === 'mixed' && k ? bikeColour('mixed', r()) : colour);
+      }
+    }
+  }
+
+  /**
+   * Parked scooters and motorbikes: one beside a wall, or a tight row or crowd of them side by side with their
+   * fronts to the street. How many comes from the place (scooterSpacing) and the "Parked scooters" slider.
+   */
+  _scooters(batch, path, e) {
+    const o = this.options;
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    const every = 10;
+    const chance = scooterChance(o.scooterDensity ?? 20, scooterSpacing(this._city && this._city.center), every) / 2;
+    if (chance <= 0) return;
+    const size = Number(o.scooterSize ?? 1) || 1;
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`scooter:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      if (r() >= chance) continue;
+      const off = e.w / 2 + 1.6;
+      const wall = nearestWall(walls, s.x + s.nx * off * side, s.y + s.ny * off * side, 9);
+      if (!wall) continue;
+      const fx = wall.nx;
+      const fy = wall.ny;
+      const grp = scooterGroup(r());
+      const style = scooterStyle(o.scooterStyle, r());
+      const sx = r() < 0.5 ? 1 : -1; // which way a lone machine points along the wall
+      const reach = grp.row ? 1.2 : 0.55;
+      const cx = wall.qx + fx * reach;
+      const cy = wall.qy + fy * reach;
+      let gap = Infinity; // distance to the carriageway edge
+      for (let i = 0; i + 1 < path.length; i++) gap = Math.min(gap, distToSegment(cx, cy, path[i], path[i + 1]));
+      if (gap - e.w / 2 < (grp.row ? 1.4 : 0.9) || !this._clearOf(cx, cy, 1.6)) continue;
+      const tx = -fy;
+      const ty = fx;
+      for (let k = 0; k < grp.count; k++) {
+        const along = (k - (grp.count - 1) / 2) * 0.72 * size;
+        const bx = cx + (grp.row ? tx * along : 0);
+        const by = cy + (grp.row ? ty * along : 0);
+        if (insideBuilding(walls, bx, by)) continue;
+        // a lone machine lies along the wall; in a row each stands nose to the street, side by side
+        const ax = grp.row ? fx : tx * sx;
+        const ay = grp.row ? fy : ty * sx;
+        this._scooter(batch, bx, by, ax, ay, style, size, o.scooterColour === 'mixed' ? scooterColour('mixed', r()) : scooterColour(o.scooterColour, 0));
+      }
+    }
+  }
+
+  /** One scooter or motorbike at local (x, y) pointing along the unit vector (ax, ay), built from scooterParts. */
+  _scooter(batch, x, y, ax, ay, style, size, bodyHex) {
+    const g = this.groundHeight(x, y);
+    this.scooterSpots?.push([x, y, ax, ay, style]);
+    const sx = -ay;
+    const sy = ax;
+    const P = (u, h, v) => [x + ax * u + sx * v, g + h, -(y + ay * u + sy * v)];
+    const parts = scooterParts(style, size);
+    const cols = { body: colArr(bodyHex), dark: colArr('#2a2c30'), seat: colArr('#1b1c1f'), metal: colArr('#9aa0a6'), light: colArr('#f2edd0'), tail: colArr('#c3302b') };
+    for (const t of parts.tubes) this._tube(batch, P(...t.a), P(...t.b), 0.02, cols[t.role]);
+    const tyre = colArr('#1f2023');
+    const hub = colArr('#aeb3b8');
+    for (const w of parts.wheels) {
+      const n = 12;
+      for (let i = 0; i < n; i++) {
+        const a0 = (i / n) * Math.PI * 2;
+        const a1 = ((i + 1) / n) * Math.PI * 2;
+        this._tube(batch, P(w.u + Math.cos(a0) * w.r, w.h + Math.sin(a0) * w.r, 0), P(w.u + Math.cos(a1) * w.r, w.h + Math.sin(a1) * w.r, 0), 0.05, tyre);
+      }
+      this._tube(batch, P(w.u, w.h, -0.06), P(w.u, w.h, 0.06), 0.045, hub); // the hub
+    }
+    for (const b of parts.boxes) {
+      const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => [x + ax * u + sx * v, y + ay * u + sy * v]);
+      this._prism(batch, q, b.h0, b.h1, cols[b.role], () => g);
+    }
+  }
+
+  /**
+   * Flocks of pigeons (or crows in Japan) on the pavement, some pecking at the ground, all facing every which way.
+   * How many comes from the place (birdSpacing) and the "Birds" slider.
+   */
+  _birds(batch, path, e) {
+    const o = this.options;
+    const centre = this._city && this._city.center;
+    const every = 10;
+    const chance = birdChance(o.birdDensity ?? 25, birdSpacing(centre), every) / 2;
+    if (chance <= 0) return;
+    const size = Number(o.birdSize ?? 1) || 1;
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    const cols = { body: null, wing: null, head: null, beak: colArr('#d8a84a'), leg: colArr('#b4585a'), tail: null };
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`bird:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      if (r() >= chance) continue;
+      const kind = birdKind(o.birdKind, centre, r());
+      const n = flockSize(kind, r());
+      const off = e.w / 2 + 1.2 + r() * 1.6;
+      const cx = s.x + s.nx * off * side;
+      const cy = s.y + s.ny * off * side;
+      if (!this._clearOf(cx, cy, 1.5) || insideBuilding(walls, cx, cy)) continue;
+      const body = colArr(BIRD_COLOURS[kind]);
+      const dark = colArr(kind === 'crow' ? '#101114' : '#5b616b');
+      const palette = { ...cols, body, wing: dark, head: kind === 'crow' ? body : colArr('#6d7a8f'), tail: dark };
+      if (kind === 'crow') palette.leg = colArr('#16171a');
+      for (let k = 0; k < n; k++) {
+        const a = r() * Math.PI * 2;
+        const d = Math.sqrt(r()) * 1.1;
+        const x = cx + Math.cos(a) * d;
+        const y = cy + Math.sin(a) * d;
+        if (insideBuilding(walls, x, y)) continue;
+        const yaw = r() * Math.PI * 2;
+        const ax = Math.cos(yaw);
+        const ay = Math.sin(yaw);
+        const sx = -ay;
+        const sy = ax;
+        const g = this.groundHeight(x, y);
+        this.birdSpots?.push([x, y, ax, ay, kind]);
+        for (const b of birdParts(kind, size, r() < 0.4)) {
+          const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => [x + ax * u + sx * v, y + ay * u + sy * v]);
+          this._prism(batch, q, b.h0, b.h1, palette[b.role], () => g);
+        }
+      }
+    }
+  }
+
+  /**
+   * Poster columns (a ring of posters under a green cap, as in Paris) and two-sided advertising panels on the pavement
+   * (the "Poster columns" slider, design, poster colours and size; see posters.js).
+   */
+  _posters(batch, path, e) {
+    const o = this.options;
+    const centre = this._city && this._city.center;
+    const every = 10;
+    const chance = adChance(o.adDensity ?? 15, adSpacing(centre), every) / 2;
+    if (chance <= 0) return;
+    const kind = adKind(o.adStyle, centre);
+    const size = Number(o.adSize ?? 1) || 1;
+    const parts = posterParts(kind, size);
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    const cols = { base: colArr('#2f5a45'), cap: colArr('#2f5a45'), top: colArr('#244a38'), frame: colArr('#3a3d42') };
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`ad:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      if (r() >= chance) continue;
+      const off = e.w / 2 + 1.1;
+      const x = s.x + s.nx * off * side;
+      const y = s.y + s.ny * off * side;
+      if (!this._clearOf(x, y, 2) || insideBuilding(walls, x, y)) continue;
+      const g = this.groundHeight(x, y);
+      this.adSpots?.push([x, y, kind]);
+      for (const ring of parts.rings) {
+        if (ring.role !== 'band') { this._cylinder(batch, x, y, ring.r, g + ring.h0, g + ring.h1, cols[ring.role], 12); continue; }
+        const n = parts.sectors;
+        const P = (k, rad, h) => [x + Math.cos((k / n) * Math.PI * 2) * rad, g + h, -(y + Math.sin((k / n) * Math.PI * 2) * rad)];
+        for (let k = 0; k < n; k++) {
+          const col = colArr(posterColour(o.posterColour, r()));
+          const m = ((k + 0.5) / n) * Math.PI * 2;
+          batch.quad(P(k, ring.r, ring.h0), P(k + 1, ring.r, ring.h0), P(k + 1, ring.r, ring.h1), P(k, ring.r, ring.h1), [Math.cos(m), 0, -Math.sin(m)], col);
+          // a bright strip across each poster, like a headline
+          const mid = (ring.h0 + ring.h1) / 2 + (r() - 0.5) * 0.5;
+          const strip = colArr(posterColour(o.posterColour, r()));
+          batch.quad(P(k, ring.r + 0.01, mid - 0.12), P(k + 1, ring.r + 0.01, mid - 0.12), P(k + 1, ring.r + 0.01, mid + 0.12), P(k, ring.r + 0.01, mid + 0.12), [Math.cos(m), 0, -Math.sin(m)], strip);
+        }
+        this._cylinder(batch, x, y, ring.r * 0.9, g + ring.h0, g + ring.h1, cols.top, 12);
+      }
+      if (parts.boxes.length) {
+        const fx = s.nx * side; // one poster faces the road, the other the pavement
+        const fy = s.ny * side;
+        const tx = -fy;
+        const ty = fx;
+        const poster = [colArr(posterColour(o.posterColour, r())), colArr(posterColour(o.posterColour, r()))];
+        let pi = 0;
+        for (const b of parts.boxes) {
+          const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => [x + tx * u + fx * v, y + ty * u + fy * v]);
+          this._prism(batch, q, b.h0, b.h1, b.role === 'poster' ? poster[pi++] : cols.frame, () => g);
+        }
+      }
+    }
+  }
+
+  /**
+   * Rubbish on the pavement: heaps of bin bags and wheelie bins against walls, round litter bins by the kerb. What goes
+   * where follows the place (rubbishSpacing, rubbishKind) and the "Rubbish" sliders.
+   */
+  _rubbish(batch, path, e) {
+    const o = this.options;
+    const centre = this._city && this._city.center;
+    const every = 8;
+    const chance = rubbishChance(o.rubbishDensity ?? 25, rubbishSpacing(centre), every) / 2;
+    if (chance <= 0) return;
+    const size = Number(o.rubbishSize ?? 1) || 1;
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`rubbish:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      if (r() >= chance) continue;
+      const kind = rubbishKind(o.rubbishKind, centre, r());
+      const hex = binColour(o.binColour, r());
+      const count = 2 + Math.floor(r() * 6);
+      if (kind === 'litter') {
+        const off = e.w / 2 + 0.9;
+        const x = s.x + s.nx * off * side;
+        const y = s.y + s.ny * off * side;
+        if (!this._clearOf(x, y, 1.5) || insideBuilding(walls, x, y)) continue;
+        this._binAt(batch, x, y, s.nx * side, s.ny * side, kind, size, hex);
+        continue;
+      }
+      const off = e.w / 2 + 1.4;
+      const wall = nearestWall(walls, s.x + s.nx * off * side, s.y + s.ny * off * side, 9);
+      if (!wall) continue;
+      const cx = wall.qx + wall.nx * 0.4;
+      const cy = wall.qy + wall.ny * 0.4;
+      let gap = Infinity; // distance to the carriageway edge
+      for (let i = 0; i + 1 < path.length; i++) gap = Math.min(gap, distToSegment(cx, cy, path[i], path[i + 1]));
+      if (gap - e.w / 2 < 0.9 || !this._clearOf(cx, cy, 1.5) || insideBuilding(walls, cx, cy)) continue;
+      if (kind === 'wheelie') {
+        const n = 1 + Math.floor(r() * 3);
+        const tx = -wall.ny;
+        const ty = wall.nx;
+        for (let k = 0; k < n; k++) {
+          const along = (k - (n - 1) / 2) * 0.75 * size;
+          this._binAt(batch, cx + tx * along, cy + ty * along, wall.nx, wall.ny, kind, size, o.binColour === 'mixed' ? binColour('mixed', r()) : hex);
+        }
+        continue;
+      }
+      // a heap of bags
+      const g = this.groundHeight(cx, cy);
+      const tx = -wall.ny;
+      const ty = wall.nx;
+      this.rubbishSpots?.push([cx, cy, wall.nx, wall.ny, kind]);
+      for (const b of bagPile(count, r, size)) {
+        const bx = cx + tx * b.u + wall.nx * b.v;
+        const by = cy + ty * b.u + wall.ny * b.v;
+        this._blob(batch, bx, g + b.h, -by, b.r, b.sy, colArr(bagColour(r())));
+      }
+    }
+  }
+
+  /** One wheelie or litter bin standing at local (x, y) with its front towards (fx, fy), built from binParts. */
+  _binAt(batch, x, y, fx, fy, kind, size, bodyHex) {
+    const g = this.groundHeight(x, y);
+    this.rubbishSpots?.push([x, y, fx, fy, kind]);
+    const tx = -fy;
+    const ty = fx;
+    const parts = binParts(kind, size);
+    const cols = { body: colArr(bodyHex), lid: colArr(kind === 'litter' ? '#2b2d31' : bodyHex === BIN_COLOURS.black ? '#3a3d42' : '#e0b92e'), wheel: colArr('#1f2023'), band: colArr('#c8ccd0') };
+    if (parts.cyl) this._cylinder(batch, x, y, parts.cyl.r, g + parts.cyl.h0, g + parts.cyl.h1, cols.body, 12);
+    for (const b of parts.boxes) {
+      const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => [x + tx * u + fx * v, y + ty * u + fy * v]);
+      this._prism(batch, q, b.h0, b.h1, cols[b.role], () => g);
+    }
+  }
+
+  /**
+   * Street-name plates screwed to street-facing walls between the ground-floor and first-floor windows (the "Street
+   * name plates" slider, colour and size; see streetnames.js).
+   */
+  _streetPlates(batch, path, e) {
+    const o = this.options;
+    const centre = this._city && this._city.center;
+    const every = 12;
+    const chance = plateChance(o.plateDensity ?? 25, plateSpacing(centre), every) / 2;
+    if (chance <= 0) return;
+    const hex = plateColour(o.plateColour, centre);
+    const ink = colArr(plateInk(hex));
+    const cols = { border: ink, plate: colArr(hex), text: ink };
+    const size = Number(o.plateSize ?? 1) || 1;
+    const parts = plateParts(size);
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`plate:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      if (r() >= chance) continue;
+      const off = e.w / 2 + 1.4;
+      const wall = nearestWall(walls, s.x + s.nx * off * side, s.y + s.ny * off * side, 9);
+      if (!wall) continue;
+      const fx = wall.nx;
+      const fy = wall.ny;
+      const tx = -fy;
+      const ty = fx;
+      const straight = [-1, 1].every((dir) => {
+        const w2 = nearestWall(walls, wall.qx + fx * 0.15 + tx * dir * 0.5 * size, wall.qy + fy * 0.15 + ty * dir * 0.5 * size, 0.35);
+        return w2 && w2.nx * fx + w2.ny * fy > 0.97;
+      });
+      if (!straight) continue;
+      const g = this.groundHeight(wall.qx, wall.qy);
+      const mid = plateCentre(g, wall.height);
+      if (mid === null) continue;
+      this.plateSpots?.push([wall.qx, wall.qy, fx, fy]);
+      for (const b of parts) {
+        const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => [wall.qx + tx * u + fx * v, wall.qy + ty * u + fy * v]);
+        this._prism(batch, q, mid - g + b.h0, mid - g + b.h1, cols[b.role], () => g);
+      }
+    }
+  }
+
+  /**
+   * Fallen leaves or petals under the street trees (the "Fallen leaves" slider, colour and size; see litter.js): small
+   * flat diamonds lying a few centimetres above the ground within a few metres of each trunk.
+   */
+  _leafLitter(pts, season) {
+    const o = this.options;
+    const density = Number(o.litterDensity ?? 0);
+    if (!(density > 0)) return;
+    const kind = litterKind(o.litterColour, season);
+    if (!kind) return;
+    const size = Number(o.litterSize ?? 1) || 1;
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    const batch = new Batch();
+    let total = 0;
+    for (let i = 0; i < pts.length && total < 60000; i++) {
+      const [tx, ty] = pts[i];
+      const r = rng(hashStr(`litter:${i}`));
+      const n = litterCount(density, r());
+      for (const p of litterScatter(n, 3.2, r)) {
+        const x = tx + p.dx;
+        const y = ty + p.dy;
+        if (insideBuilding(walls, x, y) || this._surfaces.waterHeightAt(x, y) !== null) continue;
+        const g = this.groundHeight(x, y) + 0.04;
+        const col = colArr(litterColour(kind, r()));
+        const c = litterShape(size, p.k, p.rot).map(([u, v]) => [x + u, g, -(y + v)]);
+        batch.tri(c[0], c[1], c[2], UP, col);
+        batch.tri(c[0], c[2], c[3], UP, col);
+        total++;
+      }
+    }
+    if (!batch.empty) this._addMesh(batch.toGeometry(), 'detail', 'details', { name: 'leaf-litter', cast: false });
+  }
+
+  /**
+   * Window shutters on street walls: runs of one to five neighbouring windows, on several floors, with open shutters
+   * either side or closed ones across (the "Window shutters" slider, colour and share closed; see shutters.js). Like the
+   * balconies they only go on walls that run along the world axes, so they line up with the shader's window grid.
+   */
+  _shutters(batch, path, e) {
+    const o = this.options;
+    const centre = this._city && this._city.center;
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    const every = 10;
+    const chance = shutterChance(o.shutterDensity ?? 30, shutterSpacing(centre), every) / 2;
+    if (chance <= 0) return;
+    const closedShare = Number(o.shutterClosed ?? 15);
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`shut:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      if (r() >= chance) continue;
+      const off = e.w / 2 + 1.4;
+      const wall = nearestWall(walls, s.x + s.nx * off * side, s.y + s.ny * off * side, 10);
+      if (!wall || wall.height < 3.5) continue;
+      const alongX = Math.abs(wall.ny) > 0.97;
+      const alongY = Math.abs(wall.nx) > 0.97;
+      if (!alongX && !alongY) continue;
+      const fx = alongX ? 0 : Math.sign(wall.nx);
+      const fy = alongX ? Math.sign(wall.ny) : 0;
+      const tx = -fy;
+      const ty = fx;
+      const x0 = alongX ? columnCentre(wall.qx) : wall.qx;
+      const y0 = alongY ? -columnCentre(-wall.qy) : wall.qy;
+      const hex = shutterColour(o.shutterColour, centre, r());
+      const panel = colArr(hex);
+      const slat = colArr(hex).map((v) => clamp(v * 0.82, 0, 1));
+      const cols = { panel, slat };
+      const run = shutterRun(r());
+      const dir = r() < 0.5 ? 1 : -1;
+      const g = this.groundHeight(x0, y0);
+      const rows = shutterRows(g, wall.height, r, 0.85);
+      for (let k = 0; k < run; k++) {
+        // the window's centre; the wall has to run straight past both of its shutters and the street be clear in front
+        const cx = x0 + (alongX ? dir * 3 * k : 0);
+        const cy = y0 + (alongY ? -dir * 3 * k : 0);
+        const straight = [-1, 1].every((d) => {
+          const w2 = nearestWall(walls, cx + fx * 0.15 + tx * d * 1.3, cy + fy * 0.15 + ty * d * 1.3, 0.35);
+          return w2 && w2.nx * fx + w2.ny * fy > 0.97;
+        });
+        let gap = Infinity; // distance to the carriageway edge
+        for (let i = 0; i + 1 < path.length; i++) gap = Math.min(gap, distToSegment(cx, cy, path[i], path[i + 1]));
+        if (!straight || gap - e.w / 2 < 0.8) continue;
+        const frame = (u, v) => [cx + tx * u + fx * v, cy + ty * u + fy * v];
+        const gk = this.groundHeight(cx, cy);
+        this.shutterSpots?.push([cx, cy, fx, fy]);
+        for (const row of rows) {
+          const base = row - gk;
+          for (const b of shutterParts(isClosed(closedShare, r()))) {
+            const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => frame(u, v));
+            this._prism(batch, q, base + b.h0, base + b.h1, cols[b.role], () => gk);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Cafe terraces on the pavement in front of walls: a row of one to four small tables with chairs round them, some under a
+   * parasol (the "Cafe terraces" slider, chair colour, parasol share and size; see cafe.js).
+   */
+  _cafes(batch, path, e) {
+    const o = this.options;
+    const centre = this._city && this._city.center;
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    const every = 10;
+    const chance = cafeChance(o.cafeDensity ?? 20, cafeSpacing(centre), every) / 2;
+    if (chance <= 0) return;
+    const size = Number(o.cafeSize ?? 1) || 1;
+    const cols = { top: colArr('#d9d4c6'), stem: colArr('#3a3d42'), seat: null, back: null, leg: colArr('#2a2c30') };
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`cafe:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      if (r() >= chance) continue;
+      const off = e.w / 2 + 1.4;
+      const wall = nearestWall(walls, s.x + s.nx * off * side, s.y + s.ny * off * side, 9);
+      if (!wall) continue;
+      const fx = wall.nx;
+      const fy = wall.ny;
+      const tx = -fy;
+      const ty = fx;
+      const layout = terraceLayout(r, size);
+      const reach = 1.1 * size;
+      const cx = wall.qx + fx * reach;
+      const cy = wall.qy + fy * reach;
+      const half = layout.tables.length * 0.85 * size + 0.6;
+      let gap = Infinity; // distance to the carriageway edge
+      for (let i = 0; i + 1 < path.length; i++) gap = Math.min(gap, distToSegment(cx, cy, path[i], path[i + 1]));
+      // the wall has to run straight along the whole terrace and the pavement be wide enough for it
+      const straight = [-1, 1].every((dir) => {
+        const w2 = nearestWall(walls, wall.qx + fx * 0.15 + tx * dir * half, wall.qy + fy * 0.15 + ty * dir * half, 0.35);
+        return w2 && w2.nx * fx + w2.ny * fy > 0.97;
+      });
+      if (!straight || gap - e.w / 2 < 1.2 + 0.6 * size || !this._clearOf(cx, cy, 2)) continue;
+      const hex = chairColour(o.cafeColour, centre, r());
+      const chairCol = colArr(hex);
+      const colours = { ...cols, seat: chairCol, back: chairCol };
+      const parasolHex = parasolColour(r());
+      const g = this.groundHeight(cx, cy);
+      this.cafeSpots?.push([cx, cy, fx, fy, layout.tables.length]);
+      const world = (u, v) => [cx + tx * u + fx * v, cy + ty * u + fy * v];
+      // a piece at (u, v) turned to look along angle `face` (from +u): its own frame is rotated by that angle
+      const put = (parts, u, v, face) => {
+        const c = Math.cos(face - Math.PI / 2);
+        const sn = Math.sin(face - Math.PI / 2);
+        for (const b of parts) {
+          const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([pu, pv]) => world(u + pu * c - pv * sn, v + pu * sn + pv * c));
+          this._prism(batch, q, b.h0, b.h1, colours[b.role], () => g);
+        }
+      };
+      for (const t of layout.tables) {
+        put(tableParts(size), t.u, t.v, Math.PI / 2);
+        for (const c of t.chairs) put(chairParts(size), c.u, c.v, c.face);
+        if (hasParasol(o.cafeParasol ?? 40, r())) {
+          const pp = parasolParts(size);
+          const [px, py] = world(t.u, t.v);
+          this._cylinder(batch, px, py, pp.pole.r, g + pp.pole.h0, g + pp.pole.h1, colArr('#d8d4c8'), 6);
+          const rim = colArr(parasolHex);
+          const n = 14;
+          const P = (k, h) => [px + Math.cos((k / n) * Math.PI * 2) * pp.canopy.r, g + h, -(py + Math.sin((k / n) * Math.PI * 2) * pp.canopy.r)];
+          for (let k = 0; k < n; k++) {
+            const apex = [px, g + pp.canopy.h1, -py];
+            const m = ((k + 0.5) / n) * Math.PI * 2;
+            batch.tri(apex, P(k, pp.canopy.h0), P(k + 1, pp.canopy.h0), [Math.cos(m) * 0.4, 0.9, -Math.sin(m) * 0.4], rim);
+            batch.tri(apex, P(k + 1, pp.canopy.h0), P(k, pp.canopy.h0), [-Math.cos(m) * 0.4, -0.9, Math.sin(m) * 0.4], rim); // underside
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Fire hydrants by the kerb (the "Fire hydrants" slider, colour and size; see hydrants.js): a painted body with side
+   * nozzles and a big one facing the street.
+   */
+  _hydrants(batch, path, e) {
+    const o = this.options;
+    const centre = this._city && this._city.center;
+    const every = 10;
+    const chance = hydrantChance(o.hydrantDensity ?? 30, hydrantSpacing(centre), every) / 2;
+    if (chance <= 0) return;
+    const parts = hydrantParts(Number(o.hydrantSize ?? 1) || 1);
+    const hex = hydrantColour(o.hydrantColour, centre);
+    const cols = { paint: colArr(hex), cap: colArr(hex).map((v) => v * 0.7) };
+    const walls = (this._wallIdx ||= buildWallIndex(this._city && this._city.buildings));
+    for (const s of samplePoly(path, every, every / 2)) for (const side of [-1, 1]) {
+      const r = rng(hashStr(`hydrant:${s.x.toFixed(1)}:${s.y.toFixed(1)}:${side}`));
+      if (r() >= chance) continue;
+      const off = e.w / 2 + 0.75;
+      const x = s.x + s.nx * off * side;
+      const y = s.y + s.ny * off * side;
+      if (!this._clearOf(x, y, 1.5) || insideBuilding(walls, x, y)) continue;
+      const fx = -s.nx * side; // the big nozzle faces the road
+      const fy = -s.ny * side;
+      const tx = -fy;
+      const ty = fx;
+      const g = this.groundHeight(x, y);
+      this.hydrantSpots?.push([x, y, fx, fy]);
+      for (const c of parts.cyls) this._cylinder(batch, x, y, c.r, g + c.h0, g + c.h1, cols[c.role], 10);
+      for (const b of parts.boxes) {
+        const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => [x + tx * u + fx * v, y + ty * u + fy * v]);
+        this._prism(batch, q, b.h0, b.h1, cols[b.role], () => g);
+      }
+    }
+  }
+
+  /** One bicycle at local (x, y) pointing along the unit vector (ax, ay), built from bicycleParts. */
+  _bicycle(batch, x, y, ax, ay, style, frameHex) {
+    const g = this.groundHeight(x, y);
+    this.bikeSpots?.push([x, y, ax, ay]);
+    const sx = -ay;
+    const sy = ax;
+    const P = (u, h, v) => [x + ax * u + sx * v, g + h, -(y + ay * u + sy * v)];
+    const parts = bicycleParts(style);
+    const cols = { frame: colArr(frameHex), dark: colArr('#2a2c30'), seat: colArr('#1d1e21'), basket: colArr('#9a9ea4') };
+    for (const t of parts.tubes) this._tube(batch, P(...t.a), P(...t.b), 0.017, cols[t.role]);
+    const tyre = colArr('#25262a');
+    const rim = colArr('#b9bdc2');
+    for (const w of parts.wheels) {
+      const n = 14;
+      for (let i = 0; i < n; i++) {
+        const a0 = (i / n) * Math.PI * 2;
+        const a1 = ((i + 1) / n) * Math.PI * 2;
+        this._tube(batch, P(w.u + Math.cos(a0) * w.r, w.h + Math.sin(a0) * w.r, 0), P(w.u + Math.cos(a1) * w.r, w.h + Math.sin(a1) * w.r, 0), 0.022, tyre);
+        if (i % 2 === 0) this._tube(batch, P(w.u, w.h, 0), P(w.u + Math.cos(a0) * (w.r - 0.02), w.h + Math.sin(a0) * (w.r - 0.02), 0), 0.006, rim); // spoke
+      }
+    }
+    for (const b of parts.boxes) {
+      const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => [x + ax * u + sx * v, y + ay * u + sy * v]);
+      this._prism(batch, q, b.h0, b.h1, cols[b.role], () => g);
+    }
+  }
+
+  /** A thin square-section tube from p to q (3-vectors, world axes). */
+  _tube(batch, p, q, r, col) {
+    const dx = q[0] - p[0];
+    const dy = q[1] - p[1];
+    const dz = q[2] - p[2];
+    const len = Math.hypot(dx, dy, dz);
+    if (len < 1e-6) return;
+    // u = d x up (horizontal, perpendicular to the wire), v = d x u
+    let ux = dz;
+    let uy = 0;
+    let uz = -dx;
+    if (Math.hypot(ux, uz) < 1e-9) ux = 1; // a vertical tube has no horizontal direction to be perpendicular to
+    const ul = Math.hypot(ux, uz) || 1;
+    ux = (ux / ul) * r;
+    uz = (uz / ul) * r;
+    let vx = dy * uz - dz * uy;
+    let vy = dz * ux - dx * uz;
+    let vz = dx * uy - dy * ux;
+    const vl = Math.hypot(vx, vy, vz) || 1;
+    vx = (vx / vl) * r;
+    vy = (vy / vl) * r;
+    vz = (vz / vl) * r;
+    const corner = (pt, su, sv) => [pt[0] + su * ux + sv * vx, pt[1] + sv * vy, pt[2] + su * uz + sv * vz];
+    const ring = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+    for (let i = 0; i < 4; i++) {
+      const [s0, t0] = ring[i];
+      const [s1, t1] = ring[(i + 1) % 4];
+      batch.quad(corner(p, s0, t0), corner(p, s1, t1), corner(q, s1, t1), corner(q, s0, t0), [(s0 + s1) * ux + (t0 + t1) * vx, (t0 + t1) * vy, (s0 + s1) * uz + (t0 + t1) * vz], col);
+    }
   }
 
   /** Vertical box standing on the ground at local (x, y); returns a batchable geometry. */
@@ -2701,6 +4297,7 @@ export class CityRenderer {
     pts.length = Math.min(pts.length, 40000);
     const n = pts.length;
     if (!n) return;
+    if (!surroundings) this._leafLitter(pts, season);
 
     const mix = parseTreeMix(opt.treeMix, this._city && this._city.center);
     const k0 = Number.isFinite(Number(opt.treeSizeMin)) ? Number(opt.treeSizeMin) : 0.95;
@@ -2735,6 +4332,16 @@ export class CityRenderer {
     // and a few accent trees
     const tmpC = new THREE.Color();
     const hsl = {};
+    // global foliage grading from the world settings: saturation %, hue shift in degrees, lightness %
+    const fSat = clamp(Number(opt.foliageSat ?? 100) / 100, 0, 2);
+    const fHue = Number(opt.foliageHue ?? 0) / 360;
+    const fLit = clamp(Number(opt.foliageLight ?? 100) / 100, 0.4, 1.6);
+    const foliage = (hex) => {
+      if (fSat === 1 && !fHue && fLit === 1) return hex;
+      tmpC.set(hex).getHSL(hsl);
+      tmpC.setHSL((hsl.h + fHue + 1) % 1, clamp(hsl.s * fSat, 0, 1), clamp(hsl.l * fLit, 0, 0.95));
+      return '#' + tmpC.getHexString();
+    };
     const leafColour = (r, x, y) => {
       let hex = palette[Math.floor(r() * palette.length)];
       const accents = ACCENT_CROWN[season];
@@ -2742,7 +4349,7 @@ export class CityRenderer {
       const drift = rng(hashStr(`treehue:${Math.floor(x / 60)}:${Math.floor(y / 60)}`))() - 0.5;
       tmpC.set(hex).getHSL(hsl);
       tmpC.setHSL((hsl.h + (r() - 0.5) * 0.05 + drift * 0.04 + 1) % 1, clamp(hsl.s * (0.88 + 0.24 * r()), 0, 1), clamp(hsl.l * (0.86 + 0.28 * r()), 0, 0.95));
-      return '#' + tmpC.getHexString();
+      return foliage('#' + tmpC.getHexString());
     };
     // limbs (branches under the crown): per tree matrix, in two shapes
     const limbs = { fork: [], spread: [] };
@@ -2773,7 +4380,7 @@ export class CityRenderer {
         p.set(x, g + trunkH, -y);
         s.set(rad, h, rad);
         m4.compose(p, q, s);
-        add('conifer', pt, CONIFER_CROWN[Math.floor(r() * CONIFER_CROWN.length)]);
+        add('conifer', pt, foliage(CONIFER_CROWN[Math.floor(r() * CONIFER_CROWN.length)]));
         continue;
       }
       if (kind === 'palm') {
@@ -2786,7 +4393,7 @@ export class CityRenderer {
         p.set(x, g + trunkH, -y);
         s.set(rad, rad, rad);
         m4.compose(p, q, s);
-        add('palm', pt, PALM_CROWN[Math.floor(r() * PALM_CROWN.length)]);
+        add('palm', pt, foliage(PALM_CROWN[Math.floor(r() * PALM_CROWN.length)]));
         continue;
       }
 
@@ -3095,13 +4702,59 @@ export class CityRenderer {
     return { top: merge(top), bottom: merge(bottom), hair: merge(hair), fixed: merge(fixed) };
   }
 
-  /** Car body for one CAR_TYPES entry: tapered body, cabin with a darker glass tint, four wheels. Local +Z = heading. */
-  _carGeometry(type) {
+  /**
+   * Headlamps, tail lamps, number plates and wheel hubs for one car type (the dimensions are in CAR_TRIM), in their own
+   * colours. Local +Z = heading, like _carGeometry.
+   */
+  _carTrimGeometry(type, lamps) {
+    const t = CAR_TRIM[type] || CAR_TRIM.sedan;
+    const parts = [this._carGeometry(type, true)];
+    if (!lamps) return parts[0];
+    const box = (w, h, d, x, y, z, hex) => {
+      const g = new THREE.BoxGeometry(w, h, d);
+      g.translate(x, y, z);
+      parts.push(toBatchable(g, colArr(hex)));
+    };
+    for (const sx of [-1, 1]) {
+      box(t.lamp, 0.12, 0.06, sx * (t.w / 2 - t.lamp / 2 - 0.1), t.lampY, t.front + 0.01, '#f7f3d4'); // headlamp
+      box(t.lamp, 0.1, 0.06, sx * (t.w / 2 - t.lamp / 2 - 0.08), t.lampY + 0.04, t.rear - 0.01, '#c4282a'); // tail lamp
+      const hub = new THREE.CylinderGeometry(t.wr * 0.58, t.wr * 0.58, 0.02, 10);
+      hub.rotateZ(Math.PI / 2);
+      for (const sz of [-1, 1]) {
+        const h = hub.clone();
+        h.translate(sx * (t.track / 2 + 0.115), t.wr, (sz * t.base) / 2);
+        parts.push(toBatchable(h, colArr('#a9aeb5')));
+      }
+    }
+    box(0.46, 0.11, 0.03, 0, t.lampY - 0.1, t.front + 0.01, '#ecebe3'); // front plate
+    box(0.46, 0.11, 0.03, 0, t.lampY - 0.1, t.rear - 0.01, '#ecebe3'); // rear plate
+    box(t.w * 0.5, 0.07, 0.05, 0, t.lampY - 0.2, t.front + 0.015, '#25262a'); // grille
+    return mergeGeometries(parts, false);
+  }
+
+  /** Car body for one CAR_TYPES entry: tapered body and cabin (windows and wheels with `dark`, untinted). Local +Z = heading. */
+  _carGeometry(type, dark = false) {
     const W = [1, 1, 1];
-    const GLASS = colArr('#6a737d');
+    const GLASS = colArr('#434b55');
     const parts = [];
+    const darkParts = []; // windows and tyres: they must not take the body tint, so they are drawn as a second mesh
     // box(w, h, d, centre y, centre z, colour, top width, top depth, top shift in z)
     const box = (w, h, d, y, z, col, topW = w, topD = d, shift = 0) => {
+      if (col === GLASS) {
+        // windows go to the untinted mesh; the roof slab and one pillar stay in the body colour
+        const gh = Math.max(0.1, h - 0.08);
+        const gl = taperBox(w, gh, d, topW, topD, shift, col);
+        gl.translate(0, y - 0.04, z);
+        darkParts.push(gl);
+        const roof = taperBox(topW + 0.02, 0.08, topD + 0.02, topW + 0.02, topD + 0.02, 0, W);
+        roof.translate(0, y + h / 2 - 0.04, z + shift);
+        parts.push(roof);
+        const pw = (w + topW) / 2 + 0.02;
+        const pillar = taperBox(pw, gh, 0.1, pw, 0.1, 0, W);
+        pillar.translate(0, y - 0.04, z + shift * 0.5);
+        parts.push(pillar);
+        return gl;
+      }
       const g = taperBox(w, h, d, topW, topD, shift, col);
       g.translate(0, y, z);
       parts.push(g);
@@ -3155,10 +4808,10 @@ export class CityRenderer {
         const g = new THREE.CylinderGeometry(wr, wr, 0.22, 12);
         g.rotateZ(Math.PI / 2);
         g.translate((sx * tr) / 2, wr, (sz * wb) / 2);
-        parts.push(toBatchable(g, colArr('#1d1d22')));
+        darkParts.push(toBatchable(g, colArr('#1d1d22')));
       }
     }
-    return mergeGeometries(parts, false);
+    return mergeGeometries(dark ? darkParts : parts, false);
   }
 
   /**
@@ -3503,6 +5156,49 @@ export class CityRenderer {
       });
     });
 
+    // umbrellas: a canopy (instance colour) and a pole, on the same matrices as the figure holding it
+    const umb = people.filter((e) => hasUmbrella(o.umbrellaShare ?? 0, rng(hashStr(`umb:${e.x.toFixed(2)}:${e.y.toFixed(2)}`))()));
+    if (umb.length) {
+      const up = umbrellaParts(Number(o.umbrellaSize ?? 1) || 1);
+      const c = up.canopy;
+      const cone = new THREE.ConeGeometry(c.r, c.h, 16);
+      cone.translate(c.x, c.y + c.h / 2, c.z);
+      const canopyGeo = toBatchable(cone, [1, 1, 1]);
+      const poleGeo = limb(up.pole.from, up.pole.to, 0.012, 0.012, colArr('#2a2a2e'));
+      [canopyGeo, poleGeo].forEach((geo, pi) => {
+        const im = new THREE.InstancedMesh(geo, this._materialFor('people'), umb.length);
+        umb.forEach((e, i) => {
+          im.setMatrixAt(i, place(e.x, e.y, e.yaw, e.scale, e.height));
+          if (pi === 0) im.setColorAt(i, col.set(umbrellaColour(o.umbrellaColour, rng(hashStr(`umbc:${e.x.toFixed(2)}:${e.y.toFixed(2)}`))())));
+        });
+        im.instanceMatrix.needsUpdate = true;
+        if (im.instanceColor) im.instanceColor.needsUpdate = true;
+        im.computeBoundingSphere();
+        this._registerMesh(im, 'people', 'people', 0, { name: pi === 0 ? 'umbrella-canopy' : 'umbrella-pole' });
+      });
+    }
+
+    // taxis: some ordinary cars take the place's cab colour and get a roof light
+    const taxiP = taxiChance(o.taxiShare ?? 0, c);
+    const taxis = [];
+    if (taxiP > 0) {
+      for (const e of cars) {
+        if (!canBeTaxi(e.type) || rng(hashStr(`taxi:${e.x.toFixed(1)}:${e.y.toFixed(1)}`))() >= taxiP) continue;
+        e.col = taxiColour(o.taxiColour, c, rng(hashStr(`taxic:${e.x.toFixed(1)}:${e.y.toFixed(1)}`))());
+        taxis.push(e);
+      }
+    }
+    if (taxis.length) {
+      const l = roofLight(1.44);
+      const box = new THREE.BoxGeometry(l.x1 - l.x0, l.y1 - l.y0, l.z1 - l.z0);
+      box.translate((l.x0 + l.x1) / 2, (l.y0 + l.y1) / 2, (l.z0 + l.z1) / 2 - 0.3); // over the cabin, behind the car's middle
+      const im = new THREE.InstancedMesh(toBatchable(box, colArr('#f3eecf')), this._materialFor('people'), taxis.length);
+      taxis.forEach((e, i) => im.setMatrixAt(i, place(e.x, e.y, e.yaw, 1, e.height)));
+      im.instanceMatrix.needsUpdate = true;
+      im.computeBoundingSphere();
+      this._registerMesh(im, 'people', 'people', 0, { name: 'taxi-lights' });
+    }
+
     // cars: one instanced mesh per body type
     for (const [type] of CAR_TYPES) {
       const list = cars.filter((e) => e.type === type);
@@ -3516,6 +5212,17 @@ export class CityRenderer {
       if (im.instanceColor) im.instanceColor.needsUpdate = true;
       im.computeBoundingSphere();
       this._registerMesh(im, 'people', 'people', 0, { name: `cars-${type}` });
+      // windows, tyres, lamps, plates and hubs keep their own colours, so they are a second mesh the body tint does not touch
+      const trim = new THREE.InstancedMesh(this._carTrimGeometry(type, this.options.carTrim !== false), this._materialFor('people'), list.length);
+      const white = new THREE.Color(1, 1, 1);
+      list.forEach((e, i) => {
+        trim.setMatrixAt(i, place(e.x, e.y, e.yaw, 1, e.height));
+        trim.setColorAt(i, white);
+      });
+      trim.instanceMatrix.needsUpdate = true;
+      if (trim.instanceColor) trim.instanceColor.needsUpdate = true;
+      trim.computeBoundingSphere();
+      this._registerMesh(trim, 'people', 'people', 0, { name: `cars-trim-${type}` });
     }
   }
 
@@ -3563,6 +5270,7 @@ export class CityRenderer {
     this.setLight(this.light);
     this._segs = [];
     this._lampPts = [];
+    this._wallIdx = null; // building wall index, built on first use (see walls.js)
     this._groundSamples = new Map();
 
     // ground (inner, terrain-following) and surroundings ground
@@ -3614,8 +5322,9 @@ export class CityRenderer {
     // surroundings: simple extruded footprints, lower detail
     if (this._surr && this._surr.buildings && this._surr.buildings.length) {
       const sb = this._buildBuildings(context.contextBuildings, true);
-      if (sb.walls) this._addMesh(sb.walls, 'surr', 'surroundings', { name: 'surr-walls' }).userData.surroundings = true;
-      if (sb.roofs) this._addMesh(sb.roofs, 'surr', 'surroundings', { name: 'surr-roofs' }).userData.surroundings = true;
+      const sRole = this.options.surroundWindows !== false ? 'building' : 'surr';
+      if (sb.walls) this._addMesh(sb.walls, sRole, 'surroundings', { name: 'surr-walls' }).userData.surroundings = true;
+      if (sb.roofs) this._addMesh(sb.roofs, sRole, 'surroundings', { name: 'surr-roofs' }).userData.surroundings = true;
     }
 
     this._buildMappedObjects(context.props, lm.replacements);
@@ -3705,6 +5414,11 @@ export class CityRenderer {
     if ('detailDistance' in partial) this._updateDepthRange();
     if ('straightVerticals' in partial) this._applyPose();
     if ('twoSidedShadows' in partial) this._applyShadowSides();
+    if ('shadowTint' in partial || 'shadowTintAmt' in partial) this._applyLightColors();
+    const w = this.options;
+    WALL_WEATHER.value = clamp(w.wallWeathering / 100, 0, 1);
+    GROUND_OPT.value.set(clamp(w.paveJoints / 100, 0, 1), clamp(w.paveSlab, 0.2, 2), clamp(w.roadWear / 100, 0, 1), wetDarkening(w.wetStreets));
+    WIN_OPT.value.set(clamp(w.windowVariety / 100, 0, 1), clamp(w.windowCurtains / 100, 0, 1), clamp(w.windowReflection / 100, 0, 1), clamp(w.windowFrames / 100, 0, 1));
   }
 
   /**
@@ -3747,6 +5461,8 @@ export class CityRenderer {
     if (o.shade !== undefined) a.shade = num(o.shade, 0, 1.5, a.shade);
     if (o.haze !== undefined) a.haze = num(o.haze, 0, 1.5, a.haze);
     if (o.sky !== undefined) a.sky = !!o.sky;
+    if (o.inkTint !== undefined) a.inkTint = num(o.inkTint, 0, 1, a.inkTint);
+    if (o.inkFade !== undefined) a.inkFade = num(o.inkFade, 0, 1, a.inkFade);
     this._applyFog();
     this._applyLightColors();
   }
@@ -4014,7 +5730,7 @@ export class CityRenderer {
     // so it tones on shaded walls and stays white-ish on sunlit ones
     const litMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
     litMat.onBeforeCompile = (shader) => {
-      windowPatch(shader, this._winDistU, this._focalU, 'diffuseColor.rgb *= mix(1.0, 0.8, wf);', this._nightU);
+      windowPatch(shader, this._winDistU, this._focalU, 'diffuseColor.rgb *= windowShade(vWPos, vWNrm, wf);', this._nightU);
       // Upward-facing surfaces get most of the sky light, which kept shadowed ground above the tone
       // threshold. Cut the sky (indirect) term there so cast shadows on the ground read as tone,
       // while walls keep their ambient and stay light.
@@ -4026,14 +5742,14 @@ export class CityRenderer {
         #include <lights_fragment_end>`
       );
     };
-    litMat.customProgramCacheKey = () => 'manga-lit-windows-v2';
+    litMat.customProgramCacheKey = () => 'manga-lit-windows-v3';
     // flat anime colours from vertex colours
     const vc = new THREE.MeshLambertMaterial({ vertexColors: true });
     // same, plus the distant window grid on walls (world-space, no extra geometry)
     const building = new THREE.MeshLambertMaterial({ vertexColors: true });
     building.onBeforeCompile = (shader) =>
-      windowPatch(shader, this._winDistU, this._focalU, 'diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.30, 0.40, 0.50), wf * 0.85);', this._nightU);
-    building.customProgramCacheKey = () => 'manga-windows-v2';
+      windowPatch(shader, this._winDistU, this._focalU, 'diffuseColor.rgb = windowColor(diffuseColor.rgb, vWPos, vWNrm, wf); diffuseColor.rgb *= wallWeather(vWPos, vWNrm, wf);', this._nightU);
+    building.customProgramCacheKey = () => 'manga-windows-v3';
     // matte light grey for the clay style
     const clay = new THREE.MeshStandardMaterial({ color: 0xd9d8d4, roughness: 0.95, metalness: 0 });
     // unlit albedo from vertex colours (base-colour tone term)
@@ -4072,6 +5788,19 @@ export class CityRenderer {
         uFar: { value: this.camera.far },
         uFocal: { value: 1 },
         uAoR: { value: AO_RADIUS_M },
+        uCamRot: { value: new THREE.Matrix3() },
+        uCamTan: { value: new THREE.Vector2(1, 1) },
+        uCloud: { value: new THREE.Vector4(0, 1, 0.3, 0.6) },
+        uCloudSun: { value: new THREE.Vector3(0, 1, 0) },
+        uCloudLit: { value: new THREE.Vector3(1, 1, 1) },
+        uCloudDark: { value: new THREE.Vector3(0.75, 0.82, 0.92) },
+        uCloudOpt: { value: new THREE.Vector3(0, 0, 0) },
+        uSkyTop: { value: new THREE.Vector3(0.3, 0.6, 0.9) },
+        uSkyHor: { value: new THREE.Vector3(0.9, 0.95, 1) },
+        uSkyGlow: { value: new THREE.Vector3(1, 0.95, 0.8) },
+        uSkyOpt: { value: new THREE.Vector4(0.5, 24, 0.3, 0) },
+        uSkyTone: { value: new THREE.Vector2(0, 0.5) },
+        uInk: { value: new THREE.Vector2(0, 0) },
       },
       depthTest: false,
       depthWrite: false,
@@ -4082,7 +5811,9 @@ export class CityRenderer {
       fragmentShader: TREE_FRAG,
       uniforms: { uFar: { value: this.camera.far } },
     });
-    this._mats = { ndMat, litMat, vc, building, clay, albMat, compMat, treeMat };
+    const walkMat = groundMaterial('walk');
+    const roadMat = groundMaterial('road');
+    this._mats = { ndMat, litMat, vc, building, clay, albMat, compMat, treeMat, walkMat, roadMat };
     this._quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), compMat);
     this._quad.frustumCulled = false;
     this._quadScene = new THREE.Scene();
@@ -4095,7 +5826,7 @@ export class CityRenderer {
   _applyShadowSides() {
     if (!this._mats) return;
     const side = this.options.twoSidedShadows ? THREE.DoubleSide : null;
-    for (const key of ['litMat', 'vc', 'building', 'clay', 'ndMat', 'albMat']) {
+    for (const key of ['litMat', 'vc', 'building', 'clay', 'ndMat', 'albMat', 'walkMat', 'roadMat']) {
       const m = this._mats[key];
       if (m && m.shadowSide !== side) {
         m.shadowSide = side;
@@ -4108,7 +5839,7 @@ export class CityRenderer {
   _materialFor(role) {
     const M = this._mats;
     if (this.style === 'clay') return M.clay;
-    return role === 'building' ? M.building : M.vc;
+    return role === 'building' ? M.building : role === 'sidewalk' ? M.walkMat : role === 'road' ? M.roadMat : M.vc;
   }
 
   /** Offscreen targets for a given pixel size (reused while the size is unchanged). */
@@ -4162,7 +5893,8 @@ export class CityRenderer {
     const fxOn = this._fx.active;
     const fxDepth = this._fx.needsDepth();
     const partsOn = this._partObjs.length > 0;
-    const needND = edges || (colorPass && air.shade > 0) || fxDepth || partsOn;
+    const cloudsOn = this.options.cloudCover > 0 && style !== 'clay';
+    const needND = edges || (colorPass && air.shade > 0) || fxDepth || partsOn || cloudsOn || style === 'color';
     const needAlb = lit && tone.base > 0;
     const treeStyle = this.options.treeStyle;
     // tone crowns: lines-tone with treeStyle tone / tone-noline (their own mask + normal pass)
@@ -4282,6 +6014,8 @@ export class CityRenderer {
       u.uFar.value = cam.far;
       u.uFocal.value = focal;
       u.uAoR.value = AO_RADIUS_M;
+      this._setCloudUniforms(u, cloudsOn, style === 'color' || style === 'color-lines');
+      u.uInk.value.set(air.inkTint, air.inkFade);
       r.setRenderTarget(compTarget);
       r.clear(true, true, true);
       r.render(this._quadScene, this._quadCam);
@@ -4310,6 +6044,43 @@ export class CityRenderer {
       r.setClearColor(clearColor, clearAlpha);
       r.setRenderTarget(null);
     }
+  }
+
+  /** Sky and cloud uniforms for the composite pass (see skyGradient / cloudSample in COMPOSITE_FRAG). */
+  _setCloudUniforms(u, on, colored) {
+    const o = this.options;
+    u.uCloud.value.set(on ? clamp(o.cloudCover / 100, 0, 1) : 0, clamp(o.cloudScale, 0.3, 3), clamp(o.cloudSoft / 100, 0, 1), clamp(o.cloudShade / 100, 0, 1));
+    const cam = this.camera;
+    cam.updateMatrixWorld();
+    u.uCamRot.value.setFromMatrix4(cam.matrixWorld);
+    const ty = Math.tan((cam.fov * DEG) / 2);
+    u.uCamTan.value.set(ty * cam.aspect, ty);
+    u.uCloudSun.value.copy(this.sunDir || UP_VEC);
+    const day = this._skyBlend();
+    const night = this._nightS || 0;
+    const vec = (hex) => {
+      const n = parseInt(hex.slice(1), 16);
+      return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+    };
+    // colour styles: the gradient follows the view direction (the background texture only follows the screen)
+    const pal = SKY_PALETTES[o.skyPalette] || SKY_PALETTES.clear;
+    const top = mixHex(mixHex(pal.top[0], pal.top[1], day), '#060a1c', night);
+    const hor = mixHex(mixHex(pal.hor[0], pal.hor[1], day), '#1b2440', night);
+    u.uSkyTop.value.set(...vec(top));
+    u.uSkyHor.value.set(...vec(hor));
+    u.uSkyGlow.value.set(...vec(mixHex(mixHex('#ff9a5a', pal.glow, day), '#3a4a8a', night)));
+    const hazeK = clamp(o.skyHaze / 100, 0, 1);
+    u.uSkyOpt.value.set(mix(1.1, 0.3, hazeK), 18, (clamp(o.skyGlow / 100, 0, 1) * 0.55) * (1 - night * 0.8), colored ? 1 : 0);
+    u.uSkyTone.value.set(clamp((o.skyScreentone ?? 0) / 100, 0, 1) * 0.8, clamp((o.skyScreentoneReach ?? 50) / 100, 0.1, 1));
+    if (!on) return;
+    // cloud colours follow the sun height: white and cool grey by day, peach and mauve near the horizon, navy at night
+    const lit = mixHex(mixHex('#ffc79a', '#ffffff', day), '#5a6aa0', night);
+    const dark = mixHex(mixHex('#b7869f', o.cloudDark === 'blue' ? '#98b0dc' : '#b4c0d8', day), '#1c2547', night);
+    u.uCloudLit.value.set(...vec(lit));
+    u.uCloudDark.value.set(...vec(dark));
+    const style = { puffy: 0, wispy: 1, layered: 2 }[o.cloudStyle] ?? 0;
+    const seed = (o.worldSeed || 0) * 7.31;
+    u.uCloudOpt.value.set(style, 3.7 + seed, 11.3 + seed * 0.43);
   }
 
   /** Set the per-frame uniforms shared by the particle and glow materials. */
@@ -4449,7 +6220,7 @@ const MAJOR_KINDS = new Set([
 // Roads that get guard railings along the sidewalk edge
 const RAIL_KINDS = new Set(['primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary', 'tertiary_link']);
 // Parts of the road build that belong to the 'details' group
-const DETAIL_PARTS = new Set(['markings', 'street-furniture', 'guard-rails', 'tactile']);
+const DETAIL_PARTS = new Set(['markings', 'street-furniture', 'guard-rails', 'tactile', 'wires']);
 const RESIDENTIAL_KINDS = new Set(['residential', 'unclassified', 'living_street', 'service', 'tertiary']);
 
 /**
@@ -4458,9 +6229,167 @@ const RESIDENTIAL_KINDS = new Set(['residential', 'unclassified', 'living_street
  * night = { uNightI, uNightShare, uNightCol } uniforms: at night a hashed share of the window cells
  * glows warm. The glow is added after the lighting (outgoingLight), so it is not shaded.
  */
+// Ground surface detail for the colour styles: paving joints on sidewalks, speckle / repair patches / cracks
+// on asphalt. World-space patterns, so no extra geometry; they fade out by themselves with distance.
+const GROUND_GLSL = `
+  float gHash(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+  }
+  float gNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(gHash(i), gHash(i + vec2(1.0, 0.0)), f.x), mix(gHash(i + vec2(0.0, 1.0)), gHash(i + vec2(1.0, 1.0)), f.x), f.y);
+  }
+  // 1 on a grid line of width w (metres) with cell size T; filtered by the pixel footprint so it fades, not shimmers
+  float gGrid(vec2 p, float T, float w) {
+    vec2 q = p / T;
+    vec2 fw = max(fwidth(q), vec2(1e-4));
+    vec2 d = abs(fract(q - 0.5) - 0.5);
+    vec2 e0 = vec2(w / T * 0.5);
+    vec2 line = 1.0 - smoothstep(e0, e0 + fw, d);
+    float fade = 1.0 - smoothstep(0.25, 0.6, max(fw.x, fw.y));
+    return max(line.x, line.y) * fade;
+  }
+  // sidewalk: paving slabs with joints, a different tone per slab, and a few stained slabs. x = joint strength,
+  // y = slab size (m), z = unused
+  vec3 walkDetail(vec3 col, vec3 wp) {
+    float T = max(uGroundA.y, 0.1);
+    vec2 cell = floor(wp.xz / T);
+    float h = gHash(cell);
+    col *= 1.0 + (h - 0.5) * 0.1 * uGroundA.x;
+    col *= 1.0 - 0.1 * step(0.93, gHash(cell + 17.0)) * uGroundA.x; // a stained slab
+    float joint = gGrid(wp.xz, T, 0.025);
+    return col * (1.0 - 0.2 * joint * uGroundA.x) * (1.0 - uGroundA.w) * mix(vec3(1.0), vec3(0.93, 0.97, 1.06), uGroundA.w * 3.0);
+  }
+  // asphalt: fine grain, repair patches, a few cracks. x = wear 0..1
+  vec3 roadDetail(vec3 col, vec3 wp) {
+    float w = uGroundA.z;
+    vec2 fw = fwidth(wp.xz);
+    float px = max(fw.x, fw.y);
+    float grain = (gNoise(wp.xz * 9.0) - 0.5) * 0.09 * (1.0 - smoothstep(0.03, 0.12, px));
+    vec2 cell = floor(wp.xz / 2.4);
+    float repair = step(1.0 - 0.16 * w, gHash(cell + 5.0));
+    vec2 inCell = fract(wp.xz / 2.4);
+    float patchMask = repair * step(0.08, inCell.x) * step(inCell.x, 0.92) * step(0.08, inCell.y) * step(inCell.y, 0.92);
+    float crackN = gNoise(wp.xz * vec2(0.9, 2.3) + 3.1);
+    float crack = (1.0 - smoothstep(0.0, 0.025, abs(crackN - 0.5))) * step(0.55, gNoise(wp.xz * 0.12 + 9.0)) * w;
+    float k = 1.0 + grain * (0.4 + w) - 0.09 * patchMask * w - 0.2 * crack;
+    return col * k * (1.0 - uGroundA.w * 1.2) * mix(vec3(1.0), vec3(0.9, 0.96, 1.1), uGroundA.w * 3.0);
+  }
+`;
+const GROUND_OPT = { value: new THREE.Vector4(0.6, 0.6, 0.35, 0) }; // x: paving joints 0..1, y: slab size in metres, z: road wear 0..1, w: wet darkening 0..0.3
+
+/** Lambert material with a world-space surface pattern; kind 'walk' (paving) or 'road' (asphalt). */
+function groundMaterial(kind) {
+  const m = new THREE.MeshLambertMaterial({ vertexColors: true });
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uGroundA = GROUND_OPT;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vGPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vGPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec4 uGroundA;\nvarying vec3 vGPos;\n' + GROUND_GLSL)
+      .replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.rgb = ' + (kind === 'walk' ? 'walkDetail' : 'roadDetail') + '(diffuseColor.rgb, vGPos);');
+  };
+  m.customProgramCacheKey = () => `ground-${kind}-v1`;
+  return m;
+}
+
+// Per-window look for the Lambert building materials only (the edge pass needs just the mask above).
+const WINDOW_LOOK_GLSL = `
+  // Per-window look. uWinOpt: x variety, y curtains, z sky reflection, w frames and sills (all 0..1).
+  vec2 windowUV(vec3 p, vec3 n) {
+    float u = abs(n.x) > 0.5 ? p.z : p.x;
+    return vec2((mod(u, 3.0) - 0.7) / 1.6, (mod(p.y, 3.2) - 0.8) / 1.7);
+  }
+  float windowHash(vec3 p, vec3 n) {
+    float u = abs(n.x) > 0.5 ? p.z : p.x;
+    vec3 wk = vec3(floor(u / 3.0), floor(p.y / 3.2), floor(p.x / 9.0) * 37.0 + floor(p.z / 9.0));
+    return fract(sin(dot(wk, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+  }
+  // Glass colour: a sky reflection brightening toward the top, a different brightness per window, some
+  // with curtains or blinds, a mullion on some, and a light sill under every window.
+  vec3 windowColor(vec3 wall, vec3 p, vec3 n, float wf) {
+    if (wf <= 0.0 && uWinOpt.w <= 0.0) return wall;
+    float h = windowHash(p, n);
+    float h2 = fract(h * 7.13);
+    float h3 = fract(h * 13.71);
+    vec2 w = windowUV(p, n);
+    vec3 glass = mix(vec3(0.20, 0.30, 0.40), vec3(0.52, 0.68, 0.82), smoothstep(0.0, 1.0, w.y) * uWinOpt.z);
+    glass = mix(vec3(0.30, 0.40, 0.50), glass, step(0.001, uWinOpt.z));
+    glass *= 1.0 + (h - 0.5) * 0.7 * uWinOpt.x;
+    // curtains cover the upper part and one side; blinds are horizontal slats
+    if (h2 < uWinOpt.y * 0.55) {
+      vec3 cloth = h3 < 0.25 ? vec3(0.92, 0.88, 0.74) : h3 < 0.5 ? vec3(0.90, 0.72, 0.74) : h3 < 0.75 ? vec3(0.76, 0.86, 0.74) : vec3(0.72, 0.80, 0.92);
+      float side = 0.25 + 0.4 * fract(h * 3.3);
+      float cover = max(step(w.y, 0.55) * 0.0 + step(0.72, w.y), step(h3 < 0.5 ? w.x : 1.0 - w.x, side));
+      glass = mix(glass, cloth, cover * 0.9);
+    } else if (h2 < uWinOpt.y * 0.8) {
+      float slat = step(0.5, fract(w.y * 9.0));
+      float down = step(w.y, 0.35 + 0.5 * h3);
+      glass = mix(glass, mix(vec3(0.78, 0.76, 0.70), vec3(0.62, 0.60, 0.55), slat), 0.9 * (1.0 - down));
+    }
+    // a vertical mullion on some windows
+    if (h3 < 0.4 * uWinOpt.w) glass = mix(glass, vec3(0.13, 0.16, 0.2), step(abs(w.x - 0.5), 0.03));
+    vec3 col = mix(wall, glass, wf * 0.9);
+    // sill: a light strip just under the window, a little wider than it
+    float u = abs(n.x) > 0.5 ? p.z : p.x;
+    float fy = mod(p.y, 3.2);
+    float fu = mod(u, 3.0);
+    float sill = step(0.7, fy) * (1.0 - step(0.8, fy)) * step(0.6, fu) * (1.0 - step(2.4, fu));
+    float fade = windowFade(uFocalPx, vWDepth, uWinDist);
+    return mix(col, mix(wall, vec3(0.9, 0.88, 0.83), 0.8), sill * vWin * uWinOpt.w * fade * step(abs(n.y), 0.5));
+  }
+  float vnoise3(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float n000 = fract(sin(dot(i, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    float n100 = fract(sin(dot(i + vec3(1.0, 0.0, 0.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    float n010 = fract(sin(dot(i + vec3(0.0, 1.0, 0.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    float n110 = fract(sin(dot(i + vec3(1.0, 1.0, 0.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    float n001 = fract(sin(dot(i + vec3(0.0, 0.0, 1.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    float n101 = fract(sin(dot(i + vec3(1.0, 0.0, 1.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    float n011 = fract(sin(dot(i + vec3(0.0, 1.0, 1.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    float n111 = fract(sin(dot(i + vec3(1.0, 1.0, 1.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    return mix(mix(mix(n000, n100, f.x), mix(n010, n110, f.x), f.y), mix(mix(n001, n101, f.x), mix(n011, n111, f.x), f.y), f.z);
+  }
+  // Weathering of the wall itself: darker toward the ground (splash and dirt), a mottled stain pattern, and
+  // streaks under the windows. Returns a multiplier; windows themselves are left alone.
+  float wallWeather(vec3 p, vec3 n, float wf) {
+    if (uWallWeather <= 0.0 || abs(n.y) > 0.5) return 1.0;
+    float u = abs(n.x) > 0.5 ? p.z : p.x;
+    float low = 1.0 - smoothstep(0.0, 4.5, p.y);
+    float mott = vnoise3(vec3(u * 0.45, p.y * 0.35, (abs(n.x) > 0.5 ? p.x : p.z) * 0.45)) - 0.5;
+    // drip stains under some windows: a darker band below the sill, fading as it runs down the wall
+    float fy = mod(p.y, 3.2);
+    float col = abs(mod(u, 3.0) - 1.5);
+    float h = windowHash(p, n);
+    float streak = step(0.5, h) * (1.0 - smoothstep(0.55, 0.85, col)) * smoothstep(0.0, 0.78, fy) * step(fy, 0.8) * step(2.0, p.y);
+    float k = 1.0 - uWallWeather * (0.4 * low + 0.34 * mott + 0.18 * streak);
+    return mix(clamp(k, 0.55, 1.05), 1.0, wf);
+  }
+  // Lit grayscale pass (lines + tone): the same variety as a darker or lighter window.
+  float windowShade(vec3 p, vec3 n, float wf) {
+    float h = windowHash(p, n);
+    float h2 = fract(h * 7.13);
+    float k = 0.8 * (1.0 + (h - 0.5) * 0.7 * uWinOpt.x);
+    if (h2 < uWinOpt.y * 0.55) k = mix(k, 1.0, 0.7); // curtains read light
+    return mix(1.0, clamp(k, 0.35, 1.0), wf);
+  }
+`;
+
+// window look uniform shared by every building material: variety, curtains, sky reflection, frames and sills (0..1)
+const WIN_OPT = { value: new THREE.Vector4(0.6, 0.3, 0.6, 0.5) };
+const WALL_WEATHER = { value: 0.4 }; // wall weathering 0..1
 function windowPatch(shader, winDistU, focalU, glassExpr, night) {
   shader.uniforms.uWinDist = winDistU;
   shader.uniforms.uFocalPx = focalU;
+  shader.uniforms.uWinOpt = WIN_OPT;
+  shader.uniforms.uWallWeather = WALL_WEATHER;
   shader.uniforms.uNightI = night.uNightI;
   shader.uniforms.uNightShare = night.uNightShare;
   shader.uniforms.uNightCol = night.uNightCol;
@@ -4473,7 +6402,7 @@ function windowPatch(shader, winDistU, focalU, glassExpr, night) {
   shader.fragmentShader = shader.fragmentShader
     .replace(
       '#include <common>',
-      '#include <common>\nuniform float uWinDist;\nuniform float uFocalPx;\nuniform float uNightI;\nuniform float uNightShare;\nuniform vec3 uNightCol;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nvarying float vWin;\nvarying float vWDepth;\n' + WINDOW_GLSL
+      '#include <common>\nuniform float uWinDist;\nuniform float uFocalPx;\nuniform vec4 uWinOpt;\nuniform float uWallWeather;\nuniform float uNightI;\nuniform float uNightShare;\nuniform vec3 uNightCol;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nvarying float vWin;\nvarying float vWDepth;\n' + WINDOW_GLSL + WINDOW_LOOK_GLSL
     )
     .replace(
       '#include <color_fragment>',
@@ -4534,8 +6463,10 @@ const WORLD_KEYS = [
   'carDensity', 'carParked', 'carQueue', 'carTypes', 'carPalette', 'trafficSide', 'worldSeed',
   'treeDensity', 'treeMix', 'treeSizeMin', 'treeSizeMax',
   'landmarks', 'detailPoles', 'detailSignals', 'detailRails', 'detailCrosswalks', 'detailTactile',
-  'roofStyle', 'roofColor', 'wallTone', 'furnBenches', 'furnBins', 'furnStops', 'benchStyle', 'benchColor', 'binStyle',
+  'roofStyle', 'roofColor', 'wallTone', 'furnBenches', 'furnBins', 'furnStops', 'benchStyle', 'benchColor', 'binStyle', 'benchWear',
   'barrierFences', 'barrierWalls', 'barrierHedges', 'barrierScale',
+  'foliageSat', 'foliageHue', 'foliageLight',
+  'edgeLines', 'hydrantDensity', 'hydrantColour', 'hydrantSize', 'taxiShare', 'taxiColour', 'cafeDensity', 'cafeColour', 'cafeParasol', 'cafeSize', 'shutterDensity', 'shutterColour', 'shutterClosed', 'trimShare', 'trimTone', 'trimDepth', 'litterDensity', 'litterColour', 'litterSize', 'umbrellaShare', 'umbrellaColour', 'umbrellaSize', 'plateDensity', 'plateColour', 'plateSize', 'rubbishDensity', 'rubbishKind', 'binColour', 'rubbishSize', 'adDensity', 'adStyle', 'adSize', 'posterColour', 'birdDensity', 'birdKind', 'birdSize', 'scooterDensity', 'scooterColour', 'scooterStyle', 'scooterSize', 'postboxDensity', 'postboxStyle', 'postboxSize', 'lanternDensity', 'lanternColour', 'lanternSize', 'norenDensity', 'acDensity', 'acTone', 'acSize', 'balconyDensity', 'balconyStyle', 'balconyWidth', 'laundryAmount', 'wetStreets', 'puddleSize', 'planterDensity', 'planterStyle', 'planterColour', 'planterSize', 'surroundWindows', 'lampDensity', 'lampStyle', 'lampHeight', 'patchDensity', 'crackDensity', 'patchSize', 'coverDensity', 'coverTone', 'coverSize', 'carTrim', 'roadSignDensity', 'roadSignStyle', 'mirrorDensity', 'bikeDensity', 'bikeColour', 'bikeStyle', 'roofClutter', 'roofParapet', 'roofTank', 'awningDensity', 'awningColour', 'awningDepth', 'signDensity', 'vendingDensity', 'vendingColour', 'poleSpacing', 'poleStyle', 'poleTransformers', 'wireCount', 'wireSag', 'wireThickness',
 ];
 /**
  * Species mix for a place from its latitude / longitude, so the tropics get spreading rain trees and
@@ -4633,6 +6564,16 @@ const SKIRT_COLORS = [['#2a2c38', 3], ['#7d8fa8', 2], ['#9c4a4a', 1], ['#c9bc9f'
 const HAIR_COLORS = [['#1c1a1a', 6], ['#3a2a22', 4], ['#6a4a32', 2], ['#b08a55', 1], ['#9a9a9a', 1]];
 
 // Car body types [name, weight]; buses only on wide main roads. Colours lean white / silver / black like real traffic.
+// per car type: body width, front and rear z, lamp height and width, wheel radius, wheelbase and track (see _carGeometry)
+const CAR_TRIM = {
+  sedan: { w: 1.76, front: 2.25, rear: -2.25, lampY: 0.68, lamp: 0.3, wr: 0.32, base: 2.6, track: 1.5 },
+  compact: { w: 1.68, front: 1.9, rear: -1.9, lampY: 0.64, lamp: 0.26, wr: 0.3, base: 2.4, track: 1.42 },
+  kei: { w: 1.47, front: 1.7, rear: -1.7, lampY: 0.62, lamp: 0.24, wr: 0.28, base: 2.3, track: 1.28 },
+  suv: { w: 1.86, front: 2.35, rear: -2.35, lampY: 0.82, lamp: 0.32, wr: 0.38, base: 2.8, track: 1.6 },
+  van: { w: 1.9, front: 2.45, rear: -2.45, lampY: 0.7, lamp: 0.3, wr: 0.34, base: 3.1, track: 1.62 },
+  pickup: { w: 1.5, front: 2.25, rear: -1.78, lampY: 0.68, lamp: 0.26, wr: 0.3, base: 2.4, track: 1.3 },
+  bus: { w: 2.5, front: 5.25, rear: -5.25, lampY: 0.8, lamp: 0.4, wr: 0.5, base: 6.0, track: 2.0 },
+};
 const CAR_TYPES = [['sedan', 30], ['compact', 22], ['kei', 14], ['suv', 14], ['van', 8], ['pickup', 7], ['bus', 5]];
 const CAR_COLORS = [
   ['#f2f2f4', 25], ['#c3c7cc', 15], ['#26262b', 15], ['#7c8189', 10], ['#2e3f63', 8], ['#b8352b', 8],

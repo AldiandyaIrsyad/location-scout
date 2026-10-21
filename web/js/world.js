@@ -8,22 +8,33 @@ const $ = (id) => document.getElementById(id);
 const pct = (v) => `${Math.round(v)}%`;
 const plain = (v) => String(Math.round(v));
 const times = (v) => `${v.toFixed(2)}×`;
+const wearName = (v) => (v === 0 ? 'New' : `${Math.round(v)}% worn`);
+const deg = (v) => `${Math.round(v)}°`;
+const metres = (v) => `${Math.round(v)} m`;
+const metres2 = (v) => `${v.toFixed(2)} m`;
+const cm = (v) => `${(v * 100).toFixed(1)} cm`;
 
 // [element id, option key, output formatter]
 const SLIDERS = [
-  ['wPeople', 'peopleDensity', pct], ['wWalk', 'walkShare', plain], ['wStand', 'standShare', plain], ['wTalk', 'talkShare', plain],
+  ['wPeople', 'peopleDensity', pct], ['wUmbrellas', 'umbrellaShare', pct], ['wUmbrellaSize', 'umbrellaSize', times], ['wWalk', 'walkShare', plain], ['wStand', 'standShare', plain], ['wTalk', 'talkShare', plain],
   ['wGroup', 'groupSize', plain], ['wKids', 'kidsShare', pct], ['wCross', 'crossing', pct], ['wGesture', 'gesture', pct],
   ['wCars', 'carDensity', pct], ['wParked', 'carParked', pct], ['wQueue', 'carQueue', plain],
   ['wTreeDen', 'treeDensity', pct], ['wSizeMin', 'treeSizeMin', times], ['wSizeMax', 'treeSizeMax', times],
-  ['wBarrierScale', 'barrierScale', times],
+  ['wBarrierScale', 'barrierScale', times], ['wBenchWear', 'benchWear', wearName], ['wVending', 'vendingDensity', pct], ['wPostboxes', 'postboxDensity', pct], ['wPostboxSize', 'postboxSize', times], ['wPlanters', 'planterDensity', pct], ['wPlanterSize', 'planterSize', times], ['wLamps', 'lampDensity', pct], ['wLampHeight', 'lampHeight', metres], ['wRoadSigns', 'roadSignDensity', pct], ['wMirrors', 'mirrorDensity', pct], ['wBikes', 'bikeDensity', pct], ['wScooters', 'scooterDensity', pct], ['wBirds', 'birdDensity', pct], ['wAds', 'adDensity', pct], ['wRubbish', 'rubbishDensity', pct], ['wPlates', 'plateDensity', pct], ['wCafes', 'cafeDensity', pct], ['wHydrants', 'hydrantDensity', pct], ['wHydrantSize', 'hydrantSize', times], ['wTaxis', 'taxiShare', pct], ['wCafeParasol', 'cafeParasol', pct], ['wCafeSize', 'cafeSize', times], ['wPlateSize', 'plateSize', times], ['wRubbishSize', 'rubbishSize', times], ['wAdSize', 'adSize', times], ['wBirdSize', 'birdSize', times], ['wScooterSize', 'scooterSize', times], ['wAc', 'acDensity', pct], ['wAcSize', 'acSize', times], ['wBalconies', 'balconyDensity', pct], ['wBalconyWidth', 'balconyWidth', metres2], ['wLaundry', 'laundryAmount', pct], ['wRoofClutter', 'roofClutter', pct], ['wTrim', 'trimShare', pct], ['wShutters', 'shutterDensity', pct], ['wShutterClosed', 'shutterClosed', pct], ['wTrimDepth', 'trimDepth', metres2], ['wRoofParapet', 'roofParapet', metres2], ['wLanterns', 'lanternDensity', pct], ['wLanternSize', 'lanternSize', times], ['wNoren', 'norenDensity', pct], ['wAwning', 'awningDensity', pct], ['wAwningDepth', 'awningDepth', metres2], ['wSigns', 'signDensity', pct],
+  ['wPoleSpacing', 'poleSpacing', metres], ['wWires', 'wireCount', plain], ['wWireSag', 'wireSag', metres2], ['wWireThick', 'wireThickness', cm], ['wTransformers', 'poleTransformers', pct],
+  ['wSkyScreentone', 'skyScreentone', pct], ['wSkyScreentoneReach', 'skyScreentoneReach', pct], ['wCloudCover', 'cloudCover', pct], ['wCloudScale', 'cloudScale', times], ['wCloudSoft', 'cloudSoft', pct], ['wCloudShade', 'cloudShade', pct],
+  ['wWinVariety', 'windowVariety', pct], ['wWinCurtains', 'windowCurtains', pct], ['wWinReflect', 'windowReflection', pct], ['wWinFrames', 'windowFrames', pct], ['wWeather', 'wallWeathering', pct], ['wPaveJoints', 'paveJoints', pct], ['wPaveSlab', 'paveSlab', metres2], ['wRoadWear', 'roadWear', pct], ['wWet', 'wetStreets', pct], ['wPuddleSize', 'puddleSize', times], ['wPatches', 'patchDensity', pct], ['wCracks', 'crackDensity', pct], ['wPatchSize', 'patchSize', times], ['wCovers', 'coverDensity', pct], ['wCoverSize', 'coverSize', times],
+  ['wLitter', 'litterDensity', pct], ['wLitterSize', 'litterSize', times], ['wFolSat', 'foliageSat', pct], ['wFolHue', 'foliageHue', deg], ['wFolLight', 'foliageLight', pct],
+  ['wSkyHaze', 'skyHaze', pct], ['wShadowTintAmt', 'shadowTintAmt', pct], ['wSkyGlow', 'skyGlow', pct],
 ];
 const SELECTS = [
   ['wPalette', 'carPalette'], ['wSide', 'trafficSide'],
   ['wRoofStyle', 'roofStyle'], ['wRoofColor', 'roofColor'], ['wWallTone', 'wallTone'],
   ['wBenchStyle', 'benchStyle'], ['wBenchColor', 'benchColor'], ['wBinStyle', 'binStyle'],
+  ['wCloudStyle', 'cloudStyle'], ['wCloudDark', 'cloudDark'], ['wSkyPalette', 'skyPalette'], ['wPoleStyle', 'poleStyle'], ['wEdgeLines', 'edgeLines'], ['wVendingColour', 'vendingColour'], ['wPostStyle', 'postboxStyle'], ['wAwningColour', 'awningColour'], ['wLanternColour', 'lanternColour'], ['wRoofTank', 'roofTank'], ['wTrimTone', 'trimTone'], ['wShutterColour', 'shutterColour'], ['wBalconyStyle', 'balconyStyle'], ['wAcTone', 'acTone'], ['wPlanterStyle', 'planterStyle'], ['wPlanterColour', 'planterColour'], ['wLampStyle', 'lampStyle'], ['wCoverTone', 'coverTone'], ['wSignStyle', 'roadSignStyle'], ['wBikeColour', 'bikeColour'], ['wBikeStyle', 'bikeStyle'], ['wScooterColour', 'scooterColour'], ['wScooterStyle', 'scooterStyle'], ['wBirdKind', 'birdKind'], ['wAdStyle', 'adStyle'], ['wRubbishKind', 'rubbishKind'], ['wLitterColour', 'litterColour'], ['wUmbrellaColour', 'umbrellaColour'], ['wPlateColour', 'plateColour'], ['wCafeColour', 'cafeColour'], ['wHydrantColour', 'hydrantColour'], ['wTaxiColour', 'taxiColour'], ['wBinColour', 'binColour'], ['wPosterColour', 'posterColour'], ['wShadowTint', 'shadowTint'],
 ];
 const CHECKS = [
-  ['wPoles', 'detailPoles'], ['wSignals', 'detailSignals'], ['wRails', 'detailRails'],
+  ['wCarTrim', 'carTrim'], ['wSurrWindows', 'surroundWindows'], ['wPoles', 'detailPoles'], ['wSignals', 'detailSignals'], ['wRails', 'detailRails'],
   ['wCrosswalks', 'detailCrosswalks'], ['wTactile', 'detailTactile'], ['wLandmarks', 'landmarks'],
   ['wBenches', 'furnBenches'], ['wBins', 'furnBins'], ['wStops', 'furnStops'],
   ['wFences', 'barrierFences'], ['wWalls', 'barrierWalls'], ['wHedges', 'barrierHedges'],

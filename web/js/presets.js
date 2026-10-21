@@ -13,10 +13,12 @@ const STORE_KEY = 'mangaPresets.v1';
 
 // Numeric range controls: blended linearly, snapped to the input's step, clamped to min/max.
 const NUMERIC = ['lineWidth', 'outlineWidth', 'sunAz', 'sunEl', 'shade', 'haze',
-  'toneShadow', 'toneBase', 'toneSize', 'toneOpacity', 'blackRange'];
+  'toneShadow', 'toneBase', 'toneSize', 'toneOpacity', 'blackRange', 'inkTint', 'inkFade',
+  // World settings panel sliders (sky and foliage): these also need a `change` event to reach the renderer
+  'wCloudCover', 'wCloudScale', 'wCloudSoft', 'wCloudShade', 'wSkyHaze', 'wSkyGlow', 'wSkyScreentone', 'wSkyScreentoneReach', 'wWet', 'wLamps', 'wUmbrellas', 'wLitter', 'wFolSat', 'wFolHue', 'wFolLight', 'wShadowTintAmt'];
 // Checkboxes and selects: discrete, switch at strength >= 0.5.
 const CHECKS = ['skyTone', 'toneGray', 'whiteLines'];
-const SELECTS = ['tonePattern', 'season', 'treeStyle', 'leafEdge'];
+const SELECTS = ['tonePattern', 'season', 'treeStyle', 'leafEdge', 'wSkyPalette', 'wCloudStyle', 'wCloudDark', 'wShadowTint'];
 
 // Values are in the units of the input they drive (percent, degrees, mm, multiplier, ...).
 export const PRESETS = [
@@ -27,6 +29,7 @@ export const PRESETS = [
       lineWidth: 1.2, outlineWidth: 1.5, sunAz: 60, sunEl: 32, shade: 130, haze: 80, skyTone: true,
       toneShadow: 100, toneBase: 100, tonePattern: 'dots', toneSize: 0.4, toneOpacity: 90, toneGray: false,
       blackRange: 40, whiteLines: true, season: 'summer', treeStyle: 'tone', leafEdge: 'bumpy',
+      wSkyScreentone: 40, wSkyScreentoneReach: 60, wCloudCover: 40, wCloudSoft: 0, wCloudShade: 75, wCloudStyle: 'puffy', inkFade: 12,
     },
   },
   {
@@ -36,13 +39,70 @@ export const PRESETS = [
     values: {
       lineWidth: 0.6, outlineWidth: 1.0, sunAz: 135, sunEl: 52, shade: 55, haze: 110, skyTone: true,
       season: 'summer', leafEdge: 'fluffy',
+      wSkyPalette: 'clear', wSkyHaze: 55, wSkyGlow: 50, wCloudCover: 45, wCloudSoft: 55, wCloudShade: 55, wCloudStyle: 'puffy', wCloudDark: 'blue',
+      wFolSat: 68, wFolHue: -6, wFolLight: 104, wShadowTint: 'violet', wShadowTintAmt: 25, inkTint: 70, inkFade: 55,
     },
     effects: [
-      { id: 'fog', strength: 1, params: { density: 0.22, color: '#eef2f8' } },
-      { id: 'cel', strength: 1, params: { bands: 3, softness: 0.35, lift: 0.42 } },
-      { id: 'grade', strength: 1, params: { brightness: -0.12, contrast: 1.0, saturation: 1.3, temperature: 0.08, tint: 0.02 } },
+      { id: 'fog', strength: 1, params: { density: 0.14, color: '#d8ecf8' } },
+      { id: 'cel', strength: 1, params: { bands: 3, softness: 0.12, lift: 0.28 } },
+      { id: 'grade', strength: 1, params: { brightness: -0.04, contrast: 1.1, saturation: 1.4, temperature: 0.08, tint: 0.02 } },
       { id: 'linecolor', strength: 1, params: { color: '#3a2a2e', threshold: 0.22 } },
+      { id: 'rays', strength: 1, params: { amount: 0.4, threshold: 0.72, length: 0.6 } },
       { id: 'glow', strength: 1, params: { radius: 10, amount: 0.18 } },
+    ],
+  },
+  {
+    // Manhwa on a rainy afternoon: overcast layered sky, wet streets with puddles, falling rain, a cool grey-blue grade.
+    id: 'manhwa-rain', name: 'Manhwa rain', style: 'color-lines',
+    values: {
+      lineWidth: 0.6, outlineWidth: 1.0, sunAz: 135, sunEl: 36, shade: 70, haze: 150, skyTone: true,
+      season: 'summer', leafEdge: 'fluffy',
+      wSkyPalette: 'overcast', wSkyHaze: 80, wSkyGlow: 10, wCloudCover: 90, wCloudSoft: 80, wCloudShade: 70, wCloudStyle: 'layered', wCloudDark: 'grey',
+      wFolSat: 58, wFolHue: -4, wFolLight: 96, wShadowTint: 'blue', wShadowTintAmt: 30, wWet: 75, wUmbrellas: 55, inkTint: 70, inkFade: 60,
+    },
+    effects: [
+      { id: 'fog', strength: 1, params: { density: 0.3, color: '#c4ced8' } },
+      { id: 'cel', strength: 1, params: { bands: 3, softness: 0.14, lift: 0.3 } },
+      { id: 'grade', strength: 1, params: { brightness: -0.06, contrast: 1.06, saturation: 1.05, temperature: -0.12, tint: 0.02 } },
+      { id: 'linecolor', strength: 1, params: { color: '#2e3440', threshold: 0.22 } },
+      { id: 'rain', strength: 1, params: { density: 0.55, wind: 0.25 } },
+    ],
+  },
+  {
+    // Manhwa at night: deep blue sky, lit windows and street lamps, warm glow round the lights.
+    id: 'manhwa-night', name: 'Manhwa night', style: 'color-lines',
+    values: {
+      lineWidth: 0.6, outlineWidth: 1.0, sunAz: 200, sunEl: 20, shade: 70, haze: 90, skyTone: true,
+      season: 'summer', leafEdge: 'fluffy',
+      wSkyPalette: 'deep', wSkyHaze: 40, wSkyGlow: 30, wCloudCover: 30, wCloudSoft: 60, wCloudShade: 60, wCloudStyle: 'puffy', wCloudDark: 'blue',
+      wFolSat: 60, wFolHue: -10, wFolLight: 90, wShadowTint: 'violet', wShadowTintAmt: 35, wLamps: 80, inkTint: 80, inkFade: 55,
+    },
+    effects: [
+      { id: 'night', strength: 1, params: { lights: 0.85, lamps: 1 } },
+      { id: 'fog', strength: 1, params: { density: 0.16, color: '#1c2447' } },
+      { id: 'cel', strength: 1, params: { bands: 3, softness: 0.12, lift: 0.2 } },
+      { id: 'grade', strength: 1, params: { brightness: 0.02, contrast: 1.12, saturation: 1.3, temperature: -0.05, tint: 0.04 } },
+      { id: 'linecolor', strength: 1, params: { color: '#141830', threshold: 0.22 } },
+      { id: 'glow', strength: 1, params: { radius: 12, amount: 0.3 } },
+    ],
+  },
+  {
+    // Manhwa in spring: pastel sky, cherry blossom, petals drifting down and lying under the trees, a soft warm glow.
+    id: 'manhwa-spring', name: 'Manhwa spring', style: 'color-lines',
+    values: {
+      lineWidth: 0.6, outlineWidth: 1.0, sunAz: 120, sunEl: 48, shade: 50, haze: 120, skyTone: true,
+      season: 'spring', leafEdge: 'fluffy',
+      wSkyPalette: 'pastel', wSkyHaze: 60, wSkyGlow: 60, wCloudCover: 40, wCloudSoft: 70, wCloudShade: 45, wCloudStyle: 'puffy', wCloudDark: 'blue',
+      wFolSat: 72, wFolHue: -4, wFolLight: 108, wShadowTint: 'violet', wShadowTintAmt: 20, wLitter: 55, inkTint: 65, inkFade: 60,
+    },
+    effects: [
+      { id: 'fog', strength: 1, params: { density: 0.16, color: '#f3e4ee' } },
+      { id: 'cel', strength: 1, params: { bands: 3, softness: 0.16, lift: 0.3 } },
+      { id: 'grade', strength: 1, params: { brightness: -0.02, contrast: 1.05, saturation: 1.3, temperature: 0.1, tint: 0.05 } },
+      { id: 'linecolor', strength: 1, params: { color: '#5a3a48', threshold: 0.22 } },
+      { id: 'petals', strength: 1, params: { density: 0.45 } },
+      { id: 'rays', strength: 1, params: { amount: 0.3, threshold: 0.72, length: 0.6 } },
+      { id: 'glow', strength: 1, params: { radius: 12, amount: 0.24 } },
     ],
   },
   {
@@ -79,6 +139,7 @@ export const PRESETS = [
       toneShadow: 130, toneBase: 120, tonePattern: 'speed', toneSize: 0.8, toneOpacity: 100, toneGray: false,
       blackRange: 55, whiteLines: true, season: 'summer', treeStyle: 'lines', leafEdge: 'bumpy',
     },
+    effects: [{ id: 'focus', strength: 1, params: { amount: 0.55, count: 90, inner: 0.62 } }],
   },
   {
     id: 'dusk', name: 'Dusk', style: 'color-lines',
@@ -200,6 +261,7 @@ export function initPresets({ picker, strength, strengthOut, onChange } = {}) {
       if (c.value !== v) {
         c.value = v;
         c.dispatchEvent(new Event('input', { bubbles: true }));
+        if (id.startsWith('w')) c.dispatchEvent(new Event('change', { bubbles: true }));
       }
     }
     for (const id of CHECKS) {

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { BARRIER_GROUPS, BARRIER_STYLES } from '../web/js/barriers.js';
 import {
-  BENCH_COLORS, BENCH_STYLES, benchColor, BIN_STYLES, ROOF_COLORS, WALL_TONES, benchParts, roofColors, roofShapeFor, wallColors,
+  BENCH_COLORS, BENCH_STYLES, benchColor, benchWear, BIN_STYLES, ROOF_COLORS, WALL_TONES, benchParts, roofColors, roofShapeFor, wallColors,
 } from '../web/js/scenestyle.js';
 import { paletteFor } from '../web/js/palette.js';
 
@@ -98,4 +98,31 @@ test('the options in the panel match the style tables', () => {
   assert.deepEqual(optionsOf('wBenchStyle'), BENCH_STYLES);
   assert.deepEqual(optionsOf('wBinStyle'), BIN_STYLES);
   assert.deepEqual(optionsOf('wRoofStyle'), ['auto', 'flat', 'gabled', 'hipped', 'pyramidal']);
+});
+
+const stream = (...vals) => { let i = 0; return () => vals[i++ % vals.length]; };
+
+test('a new bench has no wear at all, whatever the random stream says', () => {
+  assert.deepEqual(benchWear(0, stream(0.9)), { seatShift: 0, rust: 0, stains: [] });
+  assert.deepEqual(benchWear(-20, stream(0.9)), { seatShift: 0, rust: 0, stains: [] }, 'below 0 counts as new');
+  assert.deepEqual(benchWear('old', stream(0.9)), { seatShift: 0, rust: 0, stains: [] }, 'not a number counts as new');
+});
+
+test('wear grows the shift, rust and stain count, and stays inside its ranges', () => {
+  const worn = benchWear(100, stream(1, 1, 0.5, 0.5, 0.5, 0.5, 0.5));
+  assert.ok(Math.abs(worn.seatShift) <= 0.175 + 1e-9);
+  assert.ok(worn.rust > 0 && worn.rust <= 0.6 + 1e-9);
+  assert.equal(worn.stains.length, 4, 'full wear with the highest roll: 1 + 3 stains');
+  for (const st of worn.stains) {
+    assert.ok(Math.abs(st.u) <= 0.7 && Math.abs(st.v) <= 0.85, 'stains stay on the seat');
+    assert.ok(st.w >= 0.12 && st.w <= 0.42 && st.l >= 0.06 && st.l <= 0.26);
+  }
+  const light = benchWear(20, stream(0.5, 0, 0.5, 0.5, 0.5));
+  assert.ok(light.stains.length <= worn.stains.length);
+  assert.ok(light.rust < worn.rust, 'a lightly worn bench rusts less');
+  assert.equal(benchWear(500, stream(0.5)).stains.length, benchWear(100, stream(0.5)).stains.length, 'clamped at 100');
+});
+
+test('the same bench stream always gives the same wear', () => {
+  assert.deepEqual(benchWear(60, stream(0.1, 0.9, 0.3, 0.7)), benchWear(60, stream(0.1, 0.9, 0.3, 0.7)));
 });

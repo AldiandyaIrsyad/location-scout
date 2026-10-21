@@ -26,12 +26,38 @@ export function benchParts(style) {
         part(-0.7, -0.45, -0.05, 0.05, 0, 0.42, 'frame'),
         part(0.45, 0.7, -0.05, 0.05, 0, 0.42, 'frame'),
       ];
-    default: // park bench: slatted seat with a back
-      return [
-        part(-0.22, 0.22, -0.8, 0.8, 0.42, 0.47, 'seat'), part(-0.26, -0.2, -0.8, 0.8, 0.47, 0.9, 'seat'),
-        part(-0.2, 0.2, -0.72, -0.64, 0, 0.42, 'frame'), part(-0.2, 0.2, 0.64, 0.72, 0, 0.42, 'frame'),
-      ];
+    default: { // park bench: four seat slats, three back slats, side frames with armrests
+      const parts = [];
+      for (const u0 of [-0.22, -0.1, 0.02, 0.14]) parts.push(part(u0, u0 + 0.09, -0.8, 0.8, 0.42, 0.46, 'seat'));
+      for (const h0 of [0.52, 0.64, 0.76]) parts.push(part(-0.27, -0.23, -0.8, 0.8, h0, h0 + 0.09, 'seat'));
+      for (const v of [-0.72, 0.72]) {
+        parts.push(part(-0.25, -0.19, v - 0.04, v + 0.04, 0, 0.9, 'frame')); // rear leg rising into the back post
+        parts.push(part(0.12, 0.18, v - 0.04, v + 0.04, 0, 0.42, 'frame')); // front leg
+        parts.push(part(-0.22, 0.2, v - 0.04, v + 0.04, 0.38, 0.42, 'frame')); // rail under the seat
+        parts.push(part(-0.24, 0.2, v - 0.05, v + 0.05, 0.62, 0.66, 'frame')); // armrest
+        parts.push(part(0.12, 0.17, v - 0.04, v + 0.04, 0.42, 0.62, 'frame')); // armrest post
+      }
+      return parts;
+    }
   }
+}
+
+/**
+ * How worn one bench is, for the "Bench condition" slider (0 = new, 100 = old and stained).
+ * `rand` gives 0..1 values (one bench's own stream, so the same bench always looks the same).
+ * seatShift: lightness change of the seat, -0.17..+0.17 at full wear; rust: 0..0.6 of the way from the
+ * frame colour to rust; stains: dark patches on the seat, u / v / w / l as fractions of the seat (-1..1 and 0..1).
+ */
+export function benchWear(wear, rand) {
+  const k = Math.max(0, Math.min(100, Number(wear) || 0)) / 100;
+  if (k === 0) return { seatShift: 0, rust: 0, stains: [] };
+  const seatShift = (rand() - 0.5) * 0.35 * k;
+  const count = Math.round(k * (1 + 3 * rand()));
+  const stains = [];
+  for (let i = 0; i < count; i++) {
+    stains.push({ u: (rand() * 2 - 1) * 0.7, v: (rand() * 2 - 1) * 0.85, w: 0.12 + 0.3 * rand(), l: 0.06 + 0.2 * rand() });
+  }
+  return { seatShift, rust: 0.6 * k * (0.5 + 0.5 * rand()), stains };
 }
 
 export const ROOF_COLORS = {

@@ -1073,6 +1073,11 @@ body.compact .viewer { height: 70vh; min-height: 420px; }
 .overlay.world .wsec > summary::before { content: "▸"; display: inline-block; transition: transform .12s ease; }
 .overlay.world .wsec[open] > summary::before { transform: rotate(90deg); }
 .overlay.world .wbody { display: flex; flex-direction: column; gap: 8px; padding: 0 0 10px; }
+.overlay.world .wsub { border-top: 1px dashed var(--line); padding: 2px 0; }
+.overlay.world .wsub > summary { cursor: pointer; list-style: none; padding: 6px 0; font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--muted, currentColor); display: flex; align-items: center; gap: 6px; }
+.overlay.world .wsub > summary::-webkit-details-marker { display: none; }
+.overlay.world .wsub > summary::before { content: "▸"; display: inline-block; transition: transform .12s ease; }
+.overlay.world .wsub[open] > summary::before { transform: rotate(90deg); }
 .overlay.world .row-btns { flex: none; display: flex; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-top: 1px solid var(--line-strong); }
 .overlay.world .checks.wrap { gap: 4px 12px; }
 .overlay.world .inline-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }

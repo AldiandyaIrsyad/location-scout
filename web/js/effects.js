@@ -64,6 +64,27 @@ export const EFFECTS = [
   post('cel', false, [range('bands', 2, 6, 1, 3), range('softness', 0, 1, 0.01, 0.3), range('lift', 0, 0.7, 0.01, 0.12)]),
   post('glow', false, [range('radius', 1, 24, 0.5, 8), range('amount', 0, 1, 0.01, 0.5)]),
   post('linecolor', false, [color('color', '#3a2a2e'), range('threshold', 0.05, 0.5, 0.01, 0.22)]),
+  post('focus', false, [
+    range('amount', 0, 1, 0.01, 0.7),
+    range('count', 24, 160, 1, 72),
+    range('inner', 0.2, 0.95, 0.01, 0.55),
+    range('cx', 0, 1, 0.01, 0.5),
+    range('cy', 0, 1, 0.01, 0.5),
+    select('tone', ['ink', 'white'], 'ink'),
+  ]),
+  post('rays', false, [
+    range('amount', 0, 1, 0.01, 0.4),
+    range('threshold', 0.3, 0.95, 0.01, 0.7),
+    range('length', 0.1, 1, 0.01, 0.6),
+    range('lx', -0.5, 1.5, 0.01, 0.8),
+    range('ly', -0.5, 1.5, 0.01, 1.15),
+    color('color', '#fff0c8'),
+  ]),
+  post('frame', false, [
+    range('margin', 0, 0.15, 0.005, 0.04),
+    range('border', 0, 16, 0.5, 4),
+    select('tone', ['paper', 'dark'], 'paper'),
+  ]),
   world('night', [range('lights', 0, 1, 0.01, 0.8), range('lamps', 0, 1, 1, 1)]),
   world('rain', [range('density', 0, 1, 0.01, 0.5), range('wind', -1, 1, 0.01, 0.2)]),
   world('snow', [range('density', 0, 1, 0.01, 0.5), range('size', 0.5, 3, 0.1, 1)]),
@@ -328,6 +349,60 @@ vec3 effect(vec2 uv, vec4 src) {
 `;
 
 // Soft glow (Orton / diffusion): screen a blurred copy over the picture for the dreamy webtoon haze.
+// Manga focus (speed) lines: thin spikes fanning out from a point, starting at different distances.
+BODY.focus = `
+vec3 effect(vec2 uv, vec4 src) {
+  float aspect = uRes.x / max(uRes.y, 1.0);
+  vec2 p = (uv - vec2(pCx, pCy)) * vec2(aspect, 1.0);
+  float dn = length(p) / length(vec2(aspect, 1.0) * 0.5);   // 1.0 at the corners
+  float t = (atan(p.y, p.x) + PI) / (2.0 * PI) * pCount;
+  float cell = floor(t);
+  float h = hash12(vec2(cell, 7.3));
+  float start = pInner + hash12(vec2(cell, 3.1)) * 0.25;
+  // spikes widen outwards; some cells have no line at all
+  float w = mix(0.05, 0.45, h) * (0.3 + 0.7 * smoothstep(start, start + 0.7, dn));
+  float line = (1.0 - smoothstep(w * 0.8, w, abs(fract(t) - 0.5))) * step(0.22, h);
+  float mask = line * smoothstep(start, start + 0.08, dn) * pAmount;
+  vec3 ink = pTone < 0.5 ? vec3(0.05) : vec3(1.0);
+  return mix(src.rgb, ink, clamp(mask, 0.0, 1.0));
+}
+`;
+
+// Light shafts: bright pixels are smeared towards a light point (the sun, usually above the frame) and added back in.
+BODY.rays = `
+vec3 effect(vec2 uv, vec4 src) {
+  vec2 step1 = (vec2(pLx, pLy) - uv) * pLength / 24.0;
+  vec2 p = uv + step1 * (hash12(gl_FragCoord.xy) - 0.5);   // jitter hides banding
+  float acc = 0.0;
+  float w = 1.0;
+  for (int i = 0; i < 24; i++) {
+    p += step1;
+    acc += smoothstep(pThreshold, 1.0, luma(texture2D(tInput, clamp(p, 0.0, 1.0)).rgb)) * w;
+    w *= 0.94;
+  }
+  return src.rgb + pColor * (acc / 10.0) * pAmount;
+}
+`;
+
+// Manga panel frame: a margin around the picture with a black border.
+BODY.frame = `
+vec3 effect(vec2 uv, vec4 src) {
+  float m = pMargin;
+  float aspect = uRes.x / max(uRes.y, 1.0);
+  vec2 mm = vec2(m / aspect, m);                        // equal margin on every side in screen terms
+  vec2 d = min(uv - mm, 1.0 - mm - uv);                       // distance inside the frame, in uv
+  float dist = min(d.x * uRes.x, d.y * uRes.y);               // in pixels
+  float bw = pBorder * uScale;
+  vec3 paper = pTone < 0.5 ? vec3(0.98, 0.97, 0.94) : vec3(0.06);
+  vec3 ink = pTone < 0.5 ? vec3(0.04) : vec3(0.98, 0.97, 0.94);
+  vec3 c = src.rgb;
+  float edge = smoothstep(-0.5, 0.5, dist);
+  float inner = smoothstep(bw - 0.5, bw + 0.5, dist);
+  c = mix(ink, c, inner);
+  return mix(paper, c, edge);
+}
+`;
+
 BODY.glow = `
 vec3 effect(vec2 uv, vec4 src) {
   vec2 px = max(pRadius, 1.0) * uScale / uRes;

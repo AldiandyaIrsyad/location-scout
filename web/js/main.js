@@ -622,11 +622,13 @@ $('shadowSide').addEventListener('change', applyOptions);
 $('lightBtn').addEventListener('click', () => ($('lightPop').hidden = !$('lightPop').hidden));
 
 function updAir() {
-  renderer.setAir({ shade: Number($('shade').value) / 100, haze: Number($('haze').value) / 100, sky: $('skyTone').checked });
+  renderer.setAir({ shade: Number($('shade').value) / 100, haze: Number($('haze').value) / 100, sky: $('skyTone').checked, inkTint: Number($('inkTint').value) / 100, inkFade: Number($('inkFade').value) / 100 });
   requestRender();
 }
 bindRange('shade', pct, updAir);
 bindRange('haze', pct, updAir);
+bindRange('inkTint', pct, updAir);
+bindRange('inkFade', pct, updAir);
 $('skyTone').addEventListener('change', updAir);
 
 let toneSeed = 0;

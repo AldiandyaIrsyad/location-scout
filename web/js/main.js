@@ -24,11 +24,11 @@ initI18n(); // picks the language and translates the static text before anything
 // ---------------------------------------------------------------------------
 // State
 const state = {
-  lat: -6.1754,
-  lon: 106.8272,
+  lat: 48.8584,
+  lon: 2.2945,
   size: 300,
   far: 2,
-  name: 'Monas, Jakarta',
+  name: 'Eiffel Tower, Paris',
   style: 'lines-tone',
   lens: 32,
   city: null,

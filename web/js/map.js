@@ -3,7 +3,7 @@ import { bboxFor } from './geo.js';
 
 export class MiniMap {
   constructor(el, { onPin }) {
-    this.map = L.map(el, { zoomControl: true, attributionControl: true }).setView([-6.1754, 106.8272], 16);
+    this.map = L.map(el, { zoomControl: true, attributionControl: true }).setView([48.8584, 2.2945], 16);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',

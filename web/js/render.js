@@ -13,6 +13,7 @@ import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometr
 import { sampleHeight } from './elevation.js';
 import { EffectStack } from './effects.js';
 import { facadeGlsl, facadeShapes, facadeSeed } from './facade.js';
+import { canOpen, columnOf, gapFits, rowOf, windowBox } from './facadefit.js';
 import { landmarksFor } from './landmarks.js';
 import { makeSurfaces } from './surfaces.js';
 import { viewDepthRange } from './camera-fit.js';
@@ -229,6 +230,13 @@ function rng(seed) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+const DEFAULT_WINDOW = { half: 0.8, y0: 0.8, y1: 2.5 }; // the classic window, for walls whose building is unknown
+
+/** Facade seed of a building: what the shader and the SVG export key its windows by. */
+function facadeSeedOf(b) {
+  return facadeSeed(hashStr(`fac:${b.id ?? b.outer.length}`));
 }
 
 /** FNV-1a string hash -> uint32. */
@@ -2323,9 +2331,39 @@ export class CityRenderer {
   // ----- buildings ------------------------------------------------------------
 
   /**
-   * Build extruded buildings. Walls and caps are generated directly as triangles
-   * (no per-building meshes), then merged into two batches (walls / roofs).
+   * Ground under a footprint: the height the building stands at (`groundC`, from the centroid, raised towards the high
+   * side on a slope so no corner is buried, capped so one noisy elevation cell cannot lift it far) and the lowest corner
+   * (`groundMin`), which the walls reach down to.
    */
+  _footGround(outer, c = polyCentroid(outer)) {
+    let groundC = this.groundHeight(c[0], c[1]);
+    let groundMin = Infinity;
+    let groundMax = -Infinity;
+    for (const p of outer) {
+      const g = this.groundHeight(p[0], p[1]);
+      if (g < groundMin) groundMin = g;
+      if (g > groundMax) groundMax = g;
+    }
+    groundC = Math.max(groundC, Math.min(groundMax, groundC + 3));
+    return { groundC, groundMin };
+  }
+
+  /**
+   * The facade the shader draws on a building, as facadefit.js wants it: { seed, base, variety, openings }. Furniture
+   * is placed before the buildings are built, so this repeats the ground level they will be given.
+   */
+  _facadeOf(b) {
+    const cache = (this._facCache ||= new WeakMap());
+    let own = cache.get(b);
+    if (!own) {
+      const minH = Math.max(0, Number.isFinite(b.minHeight) ? b.minHeight : 0);
+      own = { seed: facadeSeedOf(b), base: minH > 0 ? 1e4 : this._footGround(b.outer).groundC };
+      cache.set(b, own);
+    }
+    // the two sliders are live uniforms, so they are read fresh
+    return { ...own, variety: clamp((this.options.facadeStyles ?? 60) / 100, 0, 1), openings: clamp((this.options.facadeOpenings ?? 50) / 100, 0, 1) };
+  }
+
   _buildBuildings(list, surroundings, extra = null) {
     const lowPoly = this.options.lowPoly;
     const wallsB = new Batch();
@@ -2343,17 +2381,7 @@ export class CityRenderer {
 
       // ground under the footprint: centre drives the base, lowest corner extends the walls down
       const c = polyCentroid(outer);
-      let groundC = this.groundHeight(c[0], c[1]);
-      let groundMin = Infinity;
-      let groundMax = -Infinity;
-      for (const p of outer) {
-        const g = this.groundHeight(p[0], p[1]);
-        if (g < groundMin) groundMin = g;
-        if (g > groundMax) groundMax = g;
-      }
-      // on a slope the building stands on the high side (walls reach down to the low side), so no corner
-      // ends up buried; capped so one noisy elevation cell cannot lift it far
-      groundC = Math.max(groundC, Math.min(groundMax, groundC + 3));
+      const { groundC, groundMin } = this._footGround(outer, c);
       const minH = Math.max(0, Number.isFinite(b.minHeight) ? b.minHeight : 0);
       const height = Math.max(mappedHeight, minH + 0.05);
       // Procedural roof primitives cannot preserve courtyards. Unknown shapes such as OSM
@@ -2380,7 +2408,7 @@ export class CityRenderer {
       const v0 = wallsB.p.length / 3;
       addWalls(wallsB, outer, holes, bottom, wallTop, wc);
       if (solid) plain.push([v0, wallsB.p.length / 3]);
-      else facades.push([v0, wallsB.p.length / 3, facadeSeed(hashStr(`fac:${b.id ?? outer.length}`)), minH > 0 ? 1e4 : base]);
+      else facades.push([v0, wallsB.p.length / 3, facadeSeedOf(b), minH > 0 ? 1e4 : base]);
       // trim: plinth, string courses and cornice as thin bands round the footprint (no window grid on them)
       if (!surroundings && !solid && holes.length === 0 && hasTrim(this.options.trimShare ?? 0, rng(hashStr(`trim:${b.id ?? outer.length}`))())) {
         const t0 = wallsB.p.length / 3;
@@ -2392,7 +2420,7 @@ export class CityRenderer {
         }
         plain.push([t0, wallsB.p.length / 3]);
       }
-      else if (!surroundings && this._segs) addWindowSegs(this._segs, outer, bottom, wallTop, { seed: facadeSeed(hashStr(`fac:${b.id ?? outer.length}`)), base: minH > 0 ? 1e4 : base, variety: clamp((this.options.facadeStyles ?? 60) / 100, 0, 1), openings: clamp((this.options.facadeOpenings ?? 50) / 100, 0, 1) });
+      else if (!surroundings && this._segs) addWindowSegs(this._segs, outer, bottom, wallTop, { seed: facadeSeedOf(b), base: minH > 0 ? 1e4 : base, variety: clamp((this.options.facadeStyles ?? 60) / 100, 0, 1), openings: clamp((this.options.facadeOpenings ?? 50) / 100, 0, 1) });
       if (flat) {
         addCap(roofsB, outer, holes, topAbs, rc);
         if (!surroundings && !solid && holes.length === 0) this._roofTop(roofsB, outer, topAbs, height, wc, r);
@@ -3312,7 +3340,10 @@ export class CityRenderer {
       const frame = (u, v) => [cx + tx * u + fx * v, cy + ty * u + fy * v];
       const flat = () => g;
       this.balcSpots?.push([cx, cy, fx, fy]);
+      const fac = wall.building && this._facadeOf(wall.building);
+      const col = columnOf(alongX ? cx : -cy);
       for (const slab of slabHeights(g, wall.height, r, 0.7)) {
+        if (fac && !windowBox(fac, col, rowOf(slab - 0.8))) continue; // blank column, door or shop window: no balcony door there
         const base = slab - g;
         for (const b of balconyParts(style, width)) {
           const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => frame(u, v));
@@ -3367,7 +3398,10 @@ export class CityRenderer {
       const casing = colArr(acTone(o.acTone, r()));
       const cols = { casing, grille: dark, bracket: metal, pipe: metal };
       const frame = (u, v) => [cx + tx * u + fx * v, cy + ty * u + fy * v];
+      const fac = wall.building && this._facadeOf(wall.building);
+      const gapIdx = Math.round((alongX ? cx : -cy) / 3); // the unit hangs between columns gapIdx - 1 and gapIdx
       for (const base of unitHeights(g, wall.height, r, 0.6)) {
+        if (fac && !gapFits(fac, gapIdx, rowOf(base - 1.0), 0.8 * size)) continue; // it would cover glass or a door
         this.acSpots?.push([cx, cy, fx, fy, base]);
         for (const b of acParts(size)) {
           const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => frame(u, v));
@@ -3918,6 +3952,7 @@ export class CityRenderer {
       const run = shutterRun(r());
       const dir = r() < 0.5 ? 1 : -1;
       const g = this.groundHeight(x0, y0);
+      const fac = wall.building && this._facadeOf(wall.building);
       const rows = shutterRows(g, wall.height, r, 0.85);
       for (let k = 0; k < run; k++) {
         // the window's centre; the wall has to run straight past both of its shutters and the street be clear in front
@@ -3933,9 +3968,12 @@ export class CityRenderer {
         const frame = (u, v) => [cx + tx * u + fx * v, cy + ty * u + fy * v];
         const gk = this.groundHeight(cx, cy);
         this.shutterSpots?.push([cx, cy, fx, fy]);
+        const col = columnOf(alongX ? cx : -cy);
         for (const row of rows) {
+          const fit = fac ? windowBox(fac, col, rowOf(row)) : DEFAULT_WINDOW;
+          if (!fit) continue; // blank column, door or shop window
           const base = row - gk;
-          for (const b of shutterParts(isClosed(closedShare, r()))) {
+          for (const b of shutterParts(isClosed(closedShare, r()) || !canOpen(fit.half), fit)) {
             const q = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1]].map(([u, v]) => frame(u, v));
             this._prism(batch, q, base + b.h0, base + b.h1, cols[b.role], () => gk);
           }
@@ -5348,6 +5386,7 @@ export class CityRenderer {
     this._segs = [];
     this._lampPts = [];
     this._wallIdx = null; // building wall index, built on first use (see walls.js)
+    this._facCache = null;
     this._groundSamples = new Map();
 
     // ground (inner, terrain-following) and surroundings ground

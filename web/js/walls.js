@@ -14,7 +14,7 @@ export function buildWallIndex(buildings) {
       if (y < miny) miny = y;
       if (y > maxy) maxy = y;
     }
-    items.push({ ring, minx, miny, maxx, maxy, height: Number.isFinite(b.height) ? b.height : 6 });
+    items.push({ ring, minx, miny, maxx, maxy, height: Number.isFinite(b.height) ? b.height : 6, building: b });
   }
   return items;
 }
@@ -40,7 +40,7 @@ export function insideBuilding(index, x, y) {
 
 /**
  * The wall nearest to (x, y) within `maxD` metres: the closest point on it (qx, qy), the unit normal pointing
- * out of the building (nx, ny), the distance d and the building's height. Null when no wall is that close, or when the point is
+ * out of the building (nx, ny), the distance d, the building's height and the building object itself. Null when no wall is that close, or when the point is
  * inside a building.
  */
 export function nearestWall(index, x, y, maxD) {
@@ -69,7 +69,7 @@ export function nearestWall(index, x, y, maxD) {
         nx = -nx;
         ny = -ny;
       }
-      best = { qx, qy, nx, ny, d, height: it.height };
+      best = { qx, qy, nx, ny, d, height: it.height, building: it.building };
     }
   }
   return best;

@@ -68,19 +68,21 @@ export function shutterRows(ground, height, rand, share = 0.8) {
 /**
  * The shutters of one window in its own frame: u across the wall from the window's centre, v out from the wall, h up
  * from the row base. Returns boxes ({ u0, u1, v0, v1, h0, h1, role }, roles panel and slat): two panels, either beside
- * the window (open) or one over each half of it (closed), each with horizontal slats on its face.
+ * the window (open) or one over each half of it (closed), each with horizontal slats on its face. `fit` is the glass
+ * they go with ({ half, y0, y1 }: half-width and sill / head heights; the classic window by default).
  */
-export function shutterParts(closed) {
+export function shutterParts(closed, fit = { half: 0.8, y0: 0.8, y1: 2.5 }) {
+  const { half, y0, y1 } = fit;
   const boxes = [];
   for (const side of [-1, 1]) {
-    const a = closed ? 0.02 : 0.82;
-    const b = closed ? 0.8 : 1.22;
+    const a = closed ? 0.02 : half + 0.02;
+    const b = closed ? half : Math.min(half + 0.42, 1.4);
     const u0 = side > 0 ? a : -b;
     const u1 = side > 0 ? b : -a;
     const v0 = closed ? 0.03 : 0;
-    boxes.push({ u0, u1, v0, v1: v0 + 0.05, h0: 0.8, h1: 2.5, role: 'panel' });
-    for (let k = 0; k < 6; k++) {
-      const h = 0.95 + k * 0.27;
+    boxes.push({ u0, u1, v0, v1: v0 + 0.05, h0: y0, h1: y1, role: 'panel' });
+    for (let k = 0; y0 + 0.15 + k * 0.27 + 0.05 <= y1 - 0.1 + 1e-9; k++) {
+      const h = y0 + 0.15 + k * 0.27;
       boxes.push({ u0: u0 + 0.03, u1: u1 - 0.03, v0: v0 + 0.05, v1: v0 + 0.075, h0: h, h1: h + 0.05, role: 'slat' });
     }
   }

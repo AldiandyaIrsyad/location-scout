@@ -43,7 +43,7 @@ Open http://localhost:8080. The cache persists in the `cache` volume. Stop it wi
 | `OVERPASS_URLS` | 3 public servers, comma separated |
 | `NOMINATIM_URL` | public Nominatim |
 | `USER_AGENT` | `Panelscape/1.0 (by Aldiandya Irsyad)` |
-| `OSM_TTL` / `TILE_TTL` / `SEARCH_TTL` / `RESULT_TTL` | `168h` / `720h` / `24h` / `24h` |
+| `OSM_TTL` / `TILE_TTL` / `SEARCH_TTL` / `RESULT_TTL` | `168h` / `720h` / `168h` / `168h` |
 | `UPSTREAM_TIMEOUT` | `20s` (per request; the large surroundings query has its own limit below) |
 | `SURROUNDINGS_TIMEOUT` | `45s` |
 | `STATIC_DIR` | Serve `web/` from disk instead of the embedded copy (for frontend development) |

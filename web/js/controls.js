@@ -29,7 +29,16 @@ export class CameraRig {
     this._pointers = new Map();
     this._keys = new Set();
     this._shift = false;
+    this.speedScale = 1; // multiplier on the walking speed (slider)
+    this.stick = { x: 0, y: 0, up: 0 }; // on-screen joystick: x = right, y = forward, up = rise (-1..1)
     this._bind();
+  }
+
+  /** Touch joystick input, each axis -1..1 (forward and rise are positive). */
+  setStick(x, y, up = 0) {
+    this.stick.x = x;
+    this.stick.y = y;
+    this.stick.up = up;
   }
 
   get hint() { return HINTS[this.mode]; }
@@ -252,13 +261,14 @@ export class CameraRig {
   }
 
   _keyMove(dt) {
-    if (!this._keys.size) return;
+    const s = this.stick;
+    if (!this._keys.size && !s.x && !s.y && !s.up) return;
     const eyeH = Math.max(2, this.eye().y - this.groundAt(this.eye().x, this.eye().z));
-    const speed = THREE.MathUtils.clamp(eyeH * 1.2, 4, 300) * dt * (this._shift ? 3 : 1);
+    const speed = THREE.MathUtils.clamp(eyeH * 1.2, 4, 300) * dt * (this._shift ? 3 : 1) * this.speedScale;
     const k = this._keys;
-    const f = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
-    const r = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
-    const u = (k.has('KeyE') ? 1 : 0) - (k.has('KeyQ') ? 1 : 0);
+    const f = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0) + s.y;
+    const r = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) + s.x;
+    const u = (k.has('KeyE') ? 1 : 0) - (k.has('KeyQ') ? 1 : 0) + s.up;
     if (f || r || u) this.walk(f * speed, r * speed, u * speed, true);
   }
 }

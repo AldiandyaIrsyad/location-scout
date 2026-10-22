@@ -461,6 +461,38 @@ input[type=range]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px rgba(2
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
+.overlay.bottom-right { display: flex; align-items: center; gap: 12px; }
+.overlay.bottom-right .slider.speed { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.overlay.bottom-right .slider.speed input { width: 90px; }
+.overlay.bottom-right .slider.speed output { min-width: 28px; }
+.overlay.bottom-right .checks { display: flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
+.overlay.bottom-right > * { flex: none; }
+@media (max-width: 560px) {
+  .overlay.bottom-right { gap: 8px; max-width: calc(100% - 20px); }
+  .overlay.bottom-right .slider.speed input { width: 56px; }
+  .overlay.bottom-right .slider.speed > span, .overlay.bottom-right label.inline > span { display: none; }
+}
+/* On-screen move pad (touch): joystick for walking, two buttons for rising / sinking */
+.overlay.movepad { left: 14px; bottom: 56px; display: flex; align-items: flex-end; gap: 10px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.overlay.movepad[hidden] { display: none; }
+.pad-stick {
+  position: relative; width: 120px; height: 120px; border-radius: 50%;
+  background: rgba(8, 12, 19, .45); border: 1px solid rgba(255, 255, 255, .22);
+  touch-action: none;
+}
+.pad-knob {
+  position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px 0 0 -25px;
+  border-radius: 50%; background: rgba(255, 255, 255, .55); border: 1px solid rgba(255, 255, 255, .8);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .4); pointer-events: none;
+}
+.pad-rise { display: flex; flex-direction: column; gap: 8px; }
+.pad-rise button {
+  width: 44px; height: 44px; border-radius: 50%; font-size: 15px; line-height: 1; color: #fff;
+  background: rgba(8, 12, 19, .55); border: 1px solid rgba(255, 255, 255, .28); touch-action: none;
+}
+.pad-rise button.on { background: rgba(255, 255, 255, .45); }
+@media (max-width: 560px) { .overlay.movepad { bottom: 78px; } }
+@media (pointer: coarse) { .hint { display: none; } }
 .overlay.bottom-right select { padding-top: 3px; padding-bottom: 3px; font-size: 12px; background-color: transparent; border-color: transparent; }
 .overlay.bottom-right select:hover { border-color: var(--line-strong); }
 .overlay.center {

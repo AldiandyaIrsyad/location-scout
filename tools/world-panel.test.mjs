@@ -42,7 +42,7 @@ test('each option a control writes is a renderer default and rebuilds the scene 
   // options that act through uniforms or per-frame reads instead of a rebuild
   const live = new Set(['skyScreentone', 'skyScreentoneReach', 'wetStreets', 'puddleSize', 'cloudCover', 'cloudScale', 'cloudSoft', 'cloudShade', 'cloudStyle', 'cloudDark', 'skyPalette', 'skyHaze', 'skyGlow', 'foliageSat', 'foliageHue', 'foliageLight', 'shadowTint', 'shadowTintAmt', 'edgeLines', 'lampDensity',
     // the window, wall and ground looks are shader uniforms
-    'windowVariety', 'windowCurtains', 'windowReflection', 'windowFrames', 'wallWeathering', 'paveJoints', 'paveSlab', 'roadWear']);
+    'facadeStyles', 'facadeOpenings', 'windowVariety', 'windowCurtains', 'windowReflection', 'windowFrames', 'wallWeathering', 'paveJoints', 'paveSlab', 'roadWear']);
   const missing = [];
   for (const { id, key } of [...sliders, ...selects, ...checks]) {
     if (!new RegExp(`\\b${key}\\b`).test(defaults) && !live.has(key)) missing.push(`${id} -> ${key} has no renderer default`);

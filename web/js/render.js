@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { sampleHeight } from './elevation.js';
 import { EffectStack } from './effects.js';
+import { facadeGlsl, facadeShapes, facadeSeed } from './facade.js';
 import { landmarksFor } from './landmarks.js';
 import { makeSurfaces } from './surfaces.js';
 import { viewDepthRange } from './camera-fit.js';
@@ -420,18 +421,78 @@ function toBatchable(geo, col) {
 // ---------------------------------------------------------------------------
 
 // Window grid on building walls (world space, metres), shared by the edge pass and the Lambert
-// colour / lit materials so all of them agree: floors every 3.2 m, columns every 3 m, window 1.6 m
-// wide x 1.7 m tall. Only inner building walls carry the aWin attribute (see _buildBuildings).
+// colour / lit materials so all of them agree: floors every 3.2 m, columns every 3 m. What a cell holds comes
+// from facade.js: the window rectangles of the building's style, or on the ground floor a door, an arched
+// passage or a wide shop window. Only inner building walls carry the aWin / aFac attributes (see _buildBuildings);
+// fac = (building seed, ground level).
 const WINDOW_GLSL = `
-  // 1 inside a window rectangle on a wall (|n.y| < 0.5), 0 elsewhere
-  float windowMask(vec3 p, vec3 n) {
+  uniform vec2 uFacade;     // x: share of buildings with a non-classic window style, y: amount of doors / passages / shop windows
+  ${facadeGlsl()}
+  // position in the cell of the wall point: across the column and up the floor, metres
+  vec2 fcCellUV(vec3 p, vec3 n) {
+    float u = abs(n.x) > 0.5 ? p.z : p.x;
+    return vec2(u - floor(u / 3.0) * 3.0, p.y - floor(p.y / 3.2) * 3.2);
+  }
+  // Window rectangles of the cell a wall point is in. Returns 0 for a cell without windows (door, passage, blank
+  // column), 1 for the style's windows (a, b), 2 for a shop window (a).
+  float fcCell(vec3 p, vec3 n, vec2 fac, out vec4 a, out vec4 b) {
+    a = vec4(0.0);
+    b = vec4(0.0);
     if (abs(n.y) > 0.5) return 0.0;
-    float u = abs(n.x) > 0.5 ? p.z : p.x;                // coordinate along the wall
-    float fy = mod(p.y, 3.2);
-    float fu = mod(u, 3.0);
-    float inY = step(0.8, fy) * (1.0 - step(2.5, fy));   // 0.8..2.5 m in the floor
-    float inU = step(0.7, fu) * (1.0 - step(2.3, fu));   // 1.6 m wide, centred in the column
-    return inY * inU;
+    float u = abs(n.x) > 0.5 ? p.z : p.x;
+    float c = floor(u / 3.0);
+    float f = floor(p.y / 3.2);
+    float seed = floor(fac.x + 0.5); // fac is interpolated, so a seed can come out a hair off an integer
+    float f0 = ceil((fac.y - 1.0) / 3.2);
+    float g = f == f0 ? fcGround(seed, c) : 0.0;
+    if (g > 0.5 && g < 2.5) return 0.0;
+    if (g > 2.5) {
+      a = vec4(0.2, 2.8, fac.y + 0.45 - f * 3.2, fac.y + 2.6 - f * 3.2);
+      return 2.0;
+    }
+    if (f > f0 && fcBlank(seed, c) > 0.5) return 0.0;
+    float st = fcStyle(seed);
+    a = fcRect(st, 0.0);
+    b = fcRect(st, 1.0);
+    return 1.0;
+  }
+  bool fcIn(vec4 r, vec2 q) {
+    return r.y > r.x && q.x >= r.x && q.x <= r.y && q.y >= r.z && q.y <= r.w;
+  }
+  // The window rectangle (uLo, uHi, yLo, yHi) the wall point is inside, or vec4(0.0) when it is on bare wall
+  vec4 fcWindowAt(vec3 p, vec3 n, vec2 fac) {
+    vec4 a;
+    vec4 b;
+    if (fcCell(p, n, fac, a, b) < 0.5) return vec4(0.0);
+    vec2 q = fcCellUV(p, n);
+    if (fcIn(a, q)) return a;
+    if (fcIn(b, q)) return b;
+    return vec4(0.0);
+  }
+  // 1 inside a window on a wall (|n.y| < 0.5), 0 elsewhere
+  float windowMask(vec3 p, vec3 n, vec2 fac) {
+    vec4 r = fcWindowAt(p, n, fac);
+    return r.y > r.x ? 1.0 : 0.0;
+  }
+  // Ground-floor door or passage opening: x = kind (1 door, 2 passage, 0 none), y / z = position across / up it, 0..1
+  vec3 fcOpeningAt(vec3 p, vec3 n, vec2 fac) {
+    if (abs(n.y) > 0.5) return vec3(0.0);
+    float rel = p.y - fac.y;
+    if (rel < 0.0 || rel > 3.0) return vec3(0.0);
+    float u = abs(n.x) > 0.5 ? p.z : p.x;
+    float c = floor(u / 3.0);
+    float fu = u - c * 3.0;
+    float g = fcGround(floor(fac.x + 0.5), c);
+    if (g < 0.5 || g > 2.5) return vec3(0.0);
+    if (g < 1.5) {
+      if (fu < 1.05 || fu > 1.95 || rel > 2.2) return vec3(0.0);
+      return vec3(1.0, (fu - 1.05) / 0.9, rel / 2.2);
+    }
+    if (fu < 0.6 || fu > 2.4 || rel > 2.9) return vec3(0.0);
+    float ax = (fu - 1.5) / 0.9;
+    float ay = (rel - 2.0) / 0.9;
+    if (rel > 2.0 && ax * ax + ay * ay > 1.0) return vec3(0.0);
+    return vec3(2.0, (fu - 0.6) / 1.8, rel / 2.9);
   }
   // Visibility by projected width: focalPx * 1.6 m / depth. distant = 1 keeps windows down to ~1.5 px,
   // distant = 0 fades them out below ~6 px.
@@ -448,11 +509,13 @@ const ND_VERT = `
   uniform float uFar;
   uniform vec3 uTilt;
   attribute float aWin;
+  attribute vec2 aFac;
   varying vec3 vN;
   varying float vDepth;
   varying vec3 vWPos;
   varying vec3 vWNrm;
   varying float vWin;
+  varying vec2 vFac;
   void main() {
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     vec4 wp = modelMatrix * vec4(position, 1.0);
@@ -467,6 +530,7 @@ const ND_VERT = `
     vWPos = wp.xyz;
     vWNrm = normalize(mat3(modelMatrix) * normal);
     vWin = aWin;
+    vFac = aFac;
     gl_Position = projectionMatrix * mv;
   }
 `;
@@ -479,10 +543,12 @@ const ND_FRAG = `
   varying vec3 vWPos;
   varying vec3 vWNrm;
   varying float vWin;
+  varying vec2 vFac;
   ${WINDOW_GLSL}
   void main() {
     vec3 nv = normalize(vN);
-    float win = vWin * windowMask(vWPos, vWNrm) * windowFade(uFocalPx, vDepth, uWinDist);
+    float opened = max(windowMask(vWPos, vWNrm, vFac), step(0.5, fcOpeningAt(vWPos, vWNrm, vFac).x));
+    float win = vWin * opened * windowFade(uFocalPx, vDepth, uWinDist);
     vec3 t = cross(nv, vec3(0.0, 1.0, 0.0));
     float tl = length(t);
     if (win > 0.5 && tl > 1e-3) {
@@ -540,6 +606,7 @@ const COMPOSITE_FRAG = `
   uniform vec4 uSkyOpt;     // gradient curve, glow exponent, glow amount, on (0 = keep the background texture)
   uniform vec2 uSkyTone;    // lines + tone: sky screentone strength and how far down from the zenith it reaches
   uniform vec2 uInk;        // ink tint toward the local colour (colour + lines), ink fade with distance
+  uniform vec2 uThin;       // x: how far line radii shrink with distance (0..1), y: smallest radius in target px
   varying vec2 vUv;
 
   const vec2 DIRS[8] = vec2[8](
@@ -1128,9 +1195,14 @@ const COMPOSITE_FRAG = `
 
   void main() {
     gUV = vUv;
-    float ink = max(depthEdge(vUv, uOuter), creaseEdge(vUv, uInner));
-    vec2 pix = gl_FragCoord.xy;
     float dN = texture2D(tND, vUv).a;
+    // Far detail (lattice towers, distant windows) is thinner than a pixel, so a fixed line radius would
+    // merge it into solid black. Shrink the radii with distance, down to about one pixel.
+    float thin = uThin.x * smoothstep(12.0, 160.0, dN * uFar);
+    float rOuter = mix(uOuter, min(uOuter, uThin.y), thin);
+    float rInner = mix(uInner, min(uInner, uThin.y), thin);
+    float ink = max(depthEdge(vUv, rOuter), creaseEdge(vUv, rInner));
+    vec2 pix = gl_FragCoord.xy;
     bool sky = dN >= 0.999;
     // far lines get lighter (atmospheric perspective): full strength within 40 m, down to (1 - fade) past 450 m
     ink *= 1.0 - uInk.y * 0.7 * smoothstep(40.0, 450.0, dN * uFar);
@@ -1542,7 +1614,7 @@ export class CityRenderer {
       // Sky (see the Sky section of the World settings); drawn in the composite pass, so they never rebuild the scene
       cloudCover: 40, cloudScale: 1, cloudSoft: 30, cloudShade: 60, cloudStyle: 'puffy', cloudDark: 'grey',
       skyPalette: 'clear', skyHaze: 50, skyGlow: 40, shadowTint: 'blue', shadowTintAmt: 0,
-      windowVariety: 60, windowCurtains: 30, windowReflection: 60, windowFrames: 50, wallWeathering: 40, paveJoints: 60, paveSlab: 0.6, roadWear: 35, // window look and ground surface, a uniform (no rebuild)
+      windowVariety: 60, facadeStyles: 60, facadeOpenings: 50, windowCurtains: 30, windowReflection: 60, windowFrames: 50, wallWeathering: 40, paveJoints: 60, paveSlab: 0.6, roadWear: 35, // window look and ground surface, a uniform (no rebuild)
       foliageSat: 100, foliageHue: 0, foliageLight: 100, // global grading of crown colours (needs a rebuild)
       straightVerticals: false,
       twoSidedShadows: false,
@@ -1559,7 +1631,7 @@ export class CityRenderer {
       blackRange: 0.4,
       whiteLines: false,
     };
-    this.air = { shade: 0, haze: 1, sky: false, inkTint: 0, inkFade: 0 };
+    this.air = { shade: 0, haze: 1, sky: false, inkTint: 0, inkFade: 0, lineThin: 0.8 };
     this.lensMM = 35;
     this._cssW = canvas.clientWidth || 800;
     this._cssH = canvas.clientHeight || 600;
@@ -2259,6 +2331,7 @@ export class CityRenderer {
     const wallsB = new Batch();
     const roofsB = new Batch();
     const plain = []; // vertex ranges of walls that get no window grid
+    const facades = []; // [first vertex, end vertex, seed, ground level] of the walls that get a facade
     for (const b of list) {
       const outer = b.outer;
       if (!outer || outer.length < 3) continue;
@@ -2307,6 +2380,7 @@ export class CityRenderer {
       const v0 = wallsB.p.length / 3;
       addWalls(wallsB, outer, holes, bottom, wallTop, wc);
       if (solid) plain.push([v0, wallsB.p.length / 3]);
+      else facades.push([v0, wallsB.p.length / 3, facadeSeed(hashStr(`fac:${b.id ?? outer.length}`)), minH > 0 ? 1e4 : base]);
       // trim: plinth, string courses and cornice as thin bands round the footprint (no window grid on them)
       if (!surroundings && !solid && holes.length === 0 && hasTrim(this.options.trimShare ?? 0, rng(hashStr(`trim:${b.id ?? outer.length}`))())) {
         const t0 = wallsB.p.length / 3;
@@ -2318,7 +2392,7 @@ export class CityRenderer {
         }
         plain.push([t0, wallsB.p.length / 3]);
       }
-      else if (!surroundings && this._segs) addWindowSegs(this._segs, outer, bottom, wallTop);
+      else if (!surroundings && this._segs) addWindowSegs(this._segs, outer, bottom, wallTop, { seed: facadeSeed(hashStr(`fac:${b.id ?? outer.length}`)), base: minH > 0 ? 1e4 : base, variety: clamp((this.options.facadeStyles ?? 60) / 100, 0, 1), openings: clamp((this.options.facadeOpenings ?? 50) / 100, 0, 1) });
       if (flat) {
         addCap(roofsB, outer, holes, topAbs, rc);
         if (!surroundings && !solid && holes.length === 0) this._roofTop(roofsB, outer, topAbs, height, wc, r);
@@ -2335,6 +2409,9 @@ export class CityRenderer {
       const win = new Float32Array(walls.attributes.position.count).fill(1);
       for (const [a, z] of plain) win.fill(0, a, z);
       walls.setAttribute('aWin', new THREE.Float32BufferAttribute(win, 1));
+      const fac = new Float32Array(walls.attributes.position.count * 2);
+      for (const [a, z, seed, ground] of facades) for (let i = a; i < z; i++) { fac[i * 2] = seed; fac[i * 2 + 1] = ground; }
+      walls.setAttribute('aFac', new THREE.Float32BufferAttribute(fac, 2));
     }
     // roofs (and the landmark models drawn with them) carry an explicit 0, so the window grid never
     // shows on them whatever the GPU still holds from the walls mesh
@@ -5418,6 +5495,7 @@ export class CityRenderer {
     const w = this.options;
     WALL_WEATHER.value = clamp(w.wallWeathering / 100, 0, 1);
     GROUND_OPT.value.set(clamp(w.paveJoints / 100, 0, 1), clamp(w.paveSlab, 0.2, 2), clamp(w.roadWear / 100, 0, 1), wetDarkening(w.wetStreets));
+    FACADE_OPT.value.set(clamp(w.facadeStyles / 100, 0, 1), clamp(w.facadeOpenings / 100, 0, 1));
     WIN_OPT.value.set(clamp(w.windowVariety / 100, 0, 1), clamp(w.windowCurtains / 100, 0, 1), clamp(w.windowReflection / 100, 0, 1), clamp(w.windowFrames / 100, 0, 1));
   }
 
@@ -5463,6 +5541,7 @@ export class CityRenderer {
     if (o.sky !== undefined) a.sky = !!o.sky;
     if (o.inkTint !== undefined) a.inkTint = num(o.inkTint, 0, 1, a.inkTint);
     if (o.inkFade !== undefined) a.inkFade = num(o.inkFade, 0, 1, a.inkFade);
+    if (o.lineThin !== undefined) a.lineThin = num(o.lineThin, 0, 1, a.lineThin);
     this._applyFog();
     this._applyLightColors();
   }
@@ -5724,13 +5803,14 @@ export class CityRenderer {
         uTilt: { value: new THREE.Vector3() },
         uFocalPx: { value: 1 },
         uWinDist: { value: 1 },
+        uFacade: FACADE_OPT,
       },
     });
     // white Lambert for the lit grayscale pass used by lines-tone; window glass is a little darker
     // so it tones on shaded walls and stays white-ish on sunlit ones
     const litMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
     litMat.onBeforeCompile = (shader) => {
-      windowPatch(shader, this._winDistU, this._focalU, 'diffuseColor.rgb *= windowShade(vWPos, vWNrm, wf);', this._nightU);
+      windowPatch(shader, this._winDistU, this._focalU, 'diffuseColor.rgb *= windowShade(vWPos, vWNrm, wf, vFac);', this._nightU);
       // Upward-facing surfaces get most of the sky light, which kept shadowed ground above the tone
       // threshold. Cut the sky (indirect) term there so cast shadows on the ground read as tone,
       // while walls keep their ambient and stay light.
@@ -5742,14 +5822,14 @@ export class CityRenderer {
         #include <lights_fragment_end>`
       );
     };
-    litMat.customProgramCacheKey = () => 'manga-lit-windows-v3';
+    litMat.customProgramCacheKey = () => 'manga-lit-windows-v4';
     // flat anime colours from vertex colours
     const vc = new THREE.MeshLambertMaterial({ vertexColors: true });
     // same, plus the distant window grid on walls (world-space, no extra geometry)
     const building = new THREE.MeshLambertMaterial({ vertexColors: true });
     building.onBeforeCompile = (shader) =>
-      windowPatch(shader, this._winDistU, this._focalU, 'diffuseColor.rgb = windowColor(diffuseColor.rgb, vWPos, vWNrm, wf); diffuseColor.rgb *= wallWeather(vWPos, vWNrm, wf);', this._nightU);
-    building.customProgramCacheKey = () => 'manga-windows-v3';
+      windowPatch(shader, this._winDistU, this._focalU, 'diffuseColor.rgb = windowColor(diffuseColor.rgb, vWPos, vWNrm, wf, vFac); diffuseColor.rgb *= wallWeather(vWPos, vWNrm, wf);', this._nightU);
+    building.customProgramCacheKey = () => 'manga-windows-v4';
     // matte light grey for the clay style
     const clay = new THREE.MeshStandardMaterial({ color: 0xd9d8d4, roughness: 0.95, metalness: 0 });
     // unlit albedo from vertex colours (base-colour tone term)
@@ -5801,6 +5881,7 @@ export class CityRenderer {
         uSkyOpt: { value: new THREE.Vector4(0.5, 24, 0.3, 0) },
         uSkyTone: { value: new THREE.Vector2(0, 0.5) },
         uInk: { value: new THREE.Vector2(0, 0) },
+        uThin: { value: new THREE.Vector2(0, 1) },
       },
       depthTest: false,
       depthWrite: false,
@@ -6016,6 +6097,7 @@ export class CityRenderer {
       u.uAoR.value = AO_RADIUS_M;
       this._setCloudUniforms(u, cloudsOn, style === 'color' || style === 'color-lines');
       u.uInk.value.set(air.inkTint, air.inkFade);
+      u.uThin.value.set(air.lineThin, scale);
       r.setRenderTarget(compTarget);
       r.clear(true, true, true);
       r.render(this._quadScene, this._quadCam);
@@ -6301,23 +6383,38 @@ function groundMaterial(kind) {
 // Per-window look for the Lambert building materials only (the edge pass needs just the mask above).
 const WINDOW_LOOK_GLSL = `
   // Per-window look. uWinOpt: x variety, y curtains, z sky reflection, w frames and sills (all 0..1).
-  vec2 windowUV(vec3 p, vec3 n) {
-    float u = abs(n.x) > 0.5 ? p.z : p.x;
-    return vec2((mod(u, 3.0) - 0.7) / 1.6, (mod(p.y, 3.2) - 0.8) / 1.7);
+  // position inside the window rectangle r (see fcWindowAt), 0..1 across and up
+  vec2 windowUV(vec3 p, vec3 n, vec4 r) {
+    vec2 q = fcCellUV(p, n);
+    return vec2((q.x - r.x) / max(r.y - r.x, 0.01), (q.y - r.z) / max(r.w - r.z, 0.01));
   }
   float windowHash(vec3 p, vec3 n) {
     float u = abs(n.x) > 0.5 ? p.z : p.x;
     vec3 wk = vec3(floor(u / 3.0), floor(p.y / 3.2), floor(p.x / 9.0) * 37.0 + floor(p.z / 9.0));
     return fract(sin(dot(wk, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
   }
+  // Colour of a door or passage (op from fcOpeningAt): painted doors in four dark colours with two panels, passages
+  // near black and a little lighter at the foot.
+  vec3 doorColour(vec3 wall, vec3 p, vec3 n, vec3 op) {
+    if (op.x > 1.5) return vec3(0.07, 0.07, 0.08) * (1.0 + 0.8 * (1.0 - op.z));
+    float u = abs(n.x) > 0.5 ? p.z : p.x;
+    float k = fcDoorColour(floor(vFac.x + 0.5), floor(u / 3.0));
+    vec3 c = k < 0.5 ? vec3(0.30, 0.17, 0.11) : k < 1.5 ? vec3(0.13, 0.27, 0.22) : k < 2.5 ? vec3(0.14, 0.20, 0.34) : vec3(0.33, 0.12, 0.13);
+    float panel = step(0.15, op.y) * step(op.y, 0.85) * (step(0.08, op.z) * step(op.z, 0.46) + step(0.54, op.z) * step(op.z, 0.92));
+    return c * (1.0 - 0.22 * panel);
+  }
   // Glass colour: a sky reflection brightening toward the top, a different brightness per window, some
   // with curtains or blinds, a mullion on some, and a light sill under every window.
-  vec3 windowColor(vec3 wall, vec3 p, vec3 n, float wf) {
-    if (wf <= 0.0 && uWinOpt.w <= 0.0) return wall;
+  vec3 windowColor(vec3 wall, vec3 p, vec3 n, float wf, vec2 fac) {
+    vec3 op = fcOpeningAt(p, n, fac);
+    float ow = vWin * step(0.5, op.x) * windowFade(uFocalPx, vWDepth, uWinDist);
+    if (wf <= 0.0 && uWinOpt.w <= 0.0 && ow <= 0.0) return wall;
+    if (ow > 0.0) wall = mix(wall, doorColour(wall, p, n, op), ow);
     float h = windowHash(p, n);
     float h2 = fract(h * 7.13);
     float h3 = fract(h * 13.71);
-    vec2 w = windowUV(p, n);
+    vec4 wr = fcWindowAt(p, n, fac);
+    vec2 w = windowUV(p, n, wr);
     vec3 glass = mix(vec3(0.20, 0.30, 0.40), vec3(0.52, 0.68, 0.82), smoothstep(0.0, 1.0, w.y) * uWinOpt.z);
     glass = mix(vec3(0.30, 0.40, 0.50), glass, step(0.001, uWinOpt.z));
     glass *= 1.0 + (h - 0.5) * 0.7 * uWinOpt.x;
@@ -6335,13 +6432,19 @@ const WINDOW_LOOK_GLSL = `
     // a vertical mullion on some windows
     if (h3 < 0.4 * uWinOpt.w) glass = mix(glass, vec3(0.13, 0.16, 0.2), step(abs(w.x - 0.5), 0.03));
     vec3 col = mix(wall, glass, wf * 0.9);
-    // sill: a light strip just under the window, a little wider than it
-    float u = abs(n.x) > 0.5 ? p.z : p.x;
-    float fy = mod(p.y, 3.2);
-    float fu = mod(u, 3.0);
-    float sill = step(0.7, fy) * (1.0 - step(0.8, fy)) * step(0.6, fu) * (1.0 - step(2.4, fu));
+    // sill: a light strip just under each window, a little wider than it (not under shop windows)
+    vec4 ra;
+    vec4 rb;
+    float cell = fcCell(p, n, fac, ra, rb);
+    vec2 q = fcCellUV(p, n);
+    float sill = 0.0;
+    if (cell > 0.5 && cell < 1.5) {
+      sill = max(
+        (ra.y > ra.x && q.y >= ra.z - 0.1 && q.y < ra.z && q.x >= ra.x - 0.1 && q.x < ra.y + 0.1) ? 1.0 : 0.0,
+        (rb.y > rb.x && q.y >= rb.z - 0.1 && q.y < rb.z && q.x >= rb.x - 0.1 && q.x < rb.y + 0.1) ? 1.0 : 0.0);
+    }
     float fade = windowFade(uFocalPx, vWDepth, uWinDist);
-    return mix(col, mix(wall, vec3(0.9, 0.88, 0.83), 0.8), sill * vWin * uWinOpt.w * fade * step(abs(n.y), 0.5));
+    return mix(col, mix(wall, vec3(0.9, 0.88, 0.83), 0.8), sill * vWin * uWinOpt.w * fade);
   }
   float vnoise3(vec3 p) {
     vec3 i = floor(p);
@@ -6373,20 +6476,26 @@ const WINDOW_LOOK_GLSL = `
     return mix(clamp(k, 0.55, 1.05), 1.0, wf);
   }
   // Lit grayscale pass (lines + tone): the same variety as a darker or lighter window.
-  float windowShade(vec3 p, vec3 n, float wf) {
+  float windowShade(vec3 p, vec3 n, float wf, vec2 fac) {
     float h = windowHash(p, n);
     float h2 = fract(h * 7.13);
     float k = 0.8 * (1.0 + (h - 0.5) * 0.7 * uWinOpt.x);
     if (h2 < uWinOpt.y * 0.55) k = mix(k, 1.0, 0.7); // curtains read light
-    return mix(1.0, clamp(k, 0.35, 1.0), wf);
+    float shade = mix(1.0, clamp(k, 0.35, 1.0), wf);
+    // doors read mid grey, passages (alley openings) dark
+    vec3 op = fcOpeningAt(p, n, fac);
+    float ow = vWin * step(0.5, op.x) * windowFade(uFocalPx, vWDepth, uWinDist);
+    return mix(shade, op.x > 1.5 ? 0.06 : 0.5, ow);
   }
 `;
 
 // window look uniform shared by every building material: variety, curtains, sky reflection, frames and sills (0..1)
+const FACADE_OPT = { value: new THREE.Vector2(0.6, 0.5) }; // x: share of buildings with a non-classic window style 0..1, y: doors / passages / shop windows 0..1
 const WIN_OPT = { value: new THREE.Vector4(0.6, 0.3, 0.6, 0.5) };
 const WALL_WEATHER = { value: 0.4 }; // wall weathering 0..1
 function windowPatch(shader, winDistU, focalU, glassExpr, night) {
   shader.uniforms.uWinDist = winDistU;
+  shader.uniforms.uFacade = FACADE_OPT;
   shader.uniforms.uFocalPx = focalU;
   shader.uniforms.uWinOpt = WIN_OPT;
   shader.uniforms.uWallWeather = WALL_WEATHER;
@@ -6394,19 +6503,19 @@ function windowPatch(shader, winDistU, focalU, glassExpr, night) {
   shader.uniforms.uNightShare = night.uNightShare;
   shader.uniforms.uNightCol = night.uNightCol;
   shader.vertexShader = shader.vertexShader
-    .replace('#include <common>', '#include <common>\nattribute float aWin;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nvarying float vWin;\nvarying float vWDepth;')
+    .replace('#include <common>', '#include <common>\nattribute float aWin;\nattribute vec2 aFac;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nvarying float vWin;\nvarying vec2 vFac;\nvarying float vWDepth;')
     .replace(
       '#include <begin_vertex>',
-      '#include <begin_vertex>\n  vec4 wpW = modelMatrix * vec4(transformed, 1.0);\n  vWPos = wpW.xyz;\n  vWNrm = normalize(mat3(modelMatrix) * objectNormal);\n  vWin = aWin;\n  vWDepth = -(viewMatrix * wpW).z;'
+      '#include <begin_vertex>\n  vec4 wpW = modelMatrix * vec4(transformed, 1.0);\n  vWPos = wpW.xyz;\n  vWNrm = normalize(mat3(modelMatrix) * objectNormal);\n  vWin = aWin;\n  vFac = aFac;\n  vWDepth = -(viewMatrix * wpW).z;'
     );
   shader.fragmentShader = shader.fragmentShader
     .replace(
       '#include <common>',
-      '#include <common>\nuniform float uWinDist;\nuniform float uFocalPx;\nuniform vec4 uWinOpt;\nuniform float uWallWeather;\nuniform float uNightI;\nuniform float uNightShare;\nuniform vec3 uNightCol;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nvarying float vWin;\nvarying float vWDepth;\n' + WINDOW_GLSL + WINDOW_LOOK_GLSL
+      '#include <common>\nuniform float uWinDist;\nuniform float uFocalPx;\nuniform vec4 uWinOpt;\nuniform float uWallWeather;\nuniform float uNightI;\nuniform float uNightShare;\nuniform vec3 uNightCol;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nvarying float vWin;\nvarying vec2 vFac;\nvarying float vWDepth;\n' + WINDOW_GLSL + WINDOW_LOOK_GLSL
     )
     .replace(
       '#include <color_fragment>',
-      '#include <color_fragment>\n  float wf = vWin * windowMask(vWPos, vWNrm) * windowFade(uFocalPx, vWDepth, uWinDist);\n  ' + glassExpr
+      '#include <color_fragment>\n  float wf = vWin * windowMask(vWPos, vWNrm, vFac) * windowFade(uFocalPx, vWDepth, uWinDist);\n  ' + glassExpr
     )
     .replace(
       '#include <opaque_fragment>',
@@ -6991,11 +7100,11 @@ function polyDashes(points, on, off) {
 }
 
 /**
- * Window outlines for the SVG line set, matching WINDOW_GLSL's world-aligned grid exactly
- * (floors every 3.2 m with glass at 0.8..2.5 m, columns every 3 m with glass at 0.7..2.3 m), so the
- * vector export lines up with the raster windows. Pushes segment pairs (world xyz) onto segs.
+ * Window and door outlines for the SVG line set, matching WINDOW_GLSL's world-aligned grid exactly (the shapes come
+ * from facade.js, which the shader mirrors), so the vector export lines up with the raster windows. Pushes segment
+ * pairs (world xyz) onto segs. `facade` = { seed, base, variety, openings }.
  */
-function addWindowSegs(segs, ring, bottom, wallTop) {
+function addWindowSegs(segs, ring, bottom, wallTop, facade) {
   const OUT = 0.03; // lift off the wall so the SVG depth test does not hide them
   const n = ring.length;
   for (let i = 0; i < n; i++) {
@@ -7019,20 +7128,13 @@ function addWindowSegs(segs, ring, bottom, wallTop) {
       const t = (u - ua) / (ub - ua);
       return [a[0] + dx * t + nx * OUT, a[1] + dy * t + ny * OUT];
     };
-    for (let k = Math.ceil((uMin - 2.3) / 3); k * 3 + 0.7 <= uMax; k++) {
-      const u0 = k * 3 + 0.7;
-      const u1 = k * 3 + 2.3;
-      if (u0 < uMin || u1 > uMax) continue; // only whole windows
-      const p0 = at(u0);
-      const p1 = at(u1);
-      for (let f = Math.ceil((bottom - 0.8) / 3.2); f * 3.2 + 0.8 < wallTop; f++) {
-        const y0 = f * 3.2 + 0.8;
-        const y1 = f * 3.2 + 2.5;
-        if (y0 < bottom + 0.3 || y1 > wallTop - 0.2) continue;
-        const A = [p0[0], y0, -p0[1]], B = [p1[0], y0, -p1[1]];
-        const C = [p1[0], y1, -p1[1]], D = [p0[0], y1, -p0[1]];
-        segs.push(...A, ...B, ...B, ...C, ...C, ...D, ...D, ...A);
-      }
+    const { windows, doors } = facadeShapes(facade.seed, facade.base, uMin, uMax, bottom, wallTop, facade);
+    for (const w of [...windows, ...doors]) {
+      const p0 = at(w.u0);
+      const p1 = at(w.u1);
+      const A = [p0[0], w.y0, -p0[1]], B = [p1[0], w.y0, -p1[1]];
+      const C = [p1[0], w.y1, -p1[1]], D = [p0[0], w.y1, -p0[1]];
+      segs.push(...A, ...B, ...B, ...C, ...C, ...D, ...D, ...A);
     }
   }
 }

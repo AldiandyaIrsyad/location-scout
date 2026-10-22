@@ -6,27 +6,25 @@ import { gapCentre, unitHeights, acParts } from '../web/js/acunits.js';
 import { shutterParts, shutterRows } from '../web/js/shutters.js';
 import { plateCentre, plateParts } from '../web/js/streetnames.js';
 import { trimBands } from '../web/js/walltrim.js';
+import { COL_W, FLOOR_H, STYLES } from '../web/js/facade.js';
 
 // The wall furniture modules place things on the shader's window grid by hard-coded numbers (3.2 m floors, 3 m columns,
-// glass 0.8..2.5 m up and 0.7..2.3 m across). If the grid in render.js ever changes, these tests say which module is stale.
+// glass 0.8..2.5 m up and 0.7..2.3 m across: the "classic" window style of facade.js). If the grid in render.js or the
+// classic style ever changes, these tests say which module is stale.
 const src = readFileSync(new URL('../web/js/render.js', import.meta.url), 'utf8');
 const glsl = src.slice(src.indexOf('const WINDOW_GLSL = `'), src.indexOf('float windowFade'));
-const num = (re) => {
-  const m = glsl.match(re);
-  assert.ok(m, `shader constant ${re}`);
-  return Number(m[1]);
-};
-const floorH = num(/float fy = mod\(p\.y, ([\d.]+)\)/);
-const colW = num(/float fu = mod\(u, ([\d.]+)\)/);
-const rowLo = num(/step\(([\d.]+), fy\)/);
-const rowHi = num(/step\(([\d.]+), fy\)\)/);
-const colLo = num(/step\(([\d.]+), fu\)/);
-const colHi = num(/step\(([\d.]+), fu\)\)/);
+const [colLo, colHi, rowLo, rowHi] = STYLES[0].rects[0];
+const floorH = FLOOR_H;
+const colW = COL_W;
 const halfGlass = (colHi - colLo) / 2;
 const colMid = (colHi + colLo) / 2;
 
 test('the grid the modules assume is the one the shader draws', () => {
+  assert.equal(STYLES[0].id, 'classic');
+  assert.equal(STYLES[0].rects.length, 1);
   assert.deepEqual([floorH, colW, rowLo, rowHi, colLo, colHi], [3.2, 3, 0.8, 2.5, 0.7, 2.3]);
+  assert.ok(glsl.includes('floor(p.y / 3.2)') && glsl.includes('floor(u / 3.0)'), 'the shader cell is still 3.2 m x 3 m');
+  assert.ok(!/mod\(p\.y, 3\.2\)/.test(glsl), 'no second, hard-coded copy of the old grid');
 });
 
 test('balcony columns are centred on the glass of a column', () => {

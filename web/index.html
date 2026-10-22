@@ -116,6 +116,7 @@
                 <label class="slider" data-i18n-attr="title:tip.haze"><span data-i18n="label.haze">Haze</span> <input type="range" id="haze" min="0" max="150" step="5" value="100" /><output id="hazeOut">100%</output></label>
                 <label class="slider" title="Colour lines take a dark shade of the colour they outline instead of black (colour + lines)."><span>Line tint</span> <input type="range" id="inkTint" min="0" max="100" step="5" value="0" /><output id="inkTintOut">0%</output></label>
                 <label class="slider" title="Lines far away get lighter, so depth reads like atmospheric perspective."><span>Line fade</span> <input type="range" id="inkFade" min="0" max="100" step="5" value="0" /><output id="inkFadeOut">0%</output></label>
+                <label class="slider" title="Lines far away get thinner, so distant lattice and window detail stays open instead of filling in solid black."><span>Distant lines</span> <input type="range" id="lineThin" min="0" max="100" step="5" value="80" /><output id="lineThinOut">80%</output></label>
                 <label class="checks" data-i18n-attr="title:tip.sky"><input type="checkbox" id="skyTone" checked /> <span data-i18n="label.sky">Sky</span></label>
                 <h3 data-i18n="h.tone">Tone</h3>
                 <label class="slider" data-i18n-attr="title:tip.shadow"><span data-i18n="label.shadow">Shadow</span> <input type="range" id="toneShadow" min="0" max="250" step="5" value="100" /><output id="toneShadowOut">100%</output></label>
@@ -193,6 +194,8 @@
 <label class="inline" data-i18n-attr="title:tip.roofStyle"><span data-i18n="label.roofStyle">Roof type</span> <select id="wRoofStyle"><option value="auto" selected data-i18n="roofStyle.auto">As mapped</option><option value="flat" data-i18n="roofStyle.flat">All flat</option><option value="gabled" data-i18n="roofStyle.gabled">Gabled</option><option value="hipped" data-i18n="roofStyle.hipped">Hipped</option><option value="pyramidal" data-i18n="roofStyle.pyramidal">Pyramid</option></select></label>
 <label class="inline" data-i18n-attr="title:tip.roofColor"><span data-i18n="label.roofColor">Roof colour</span> <select id="wRoofColor"><option value="auto" selected data-i18n="roofColor.auto">Auto (by place)</option><option value="zinc" data-i18n="roofColor.zinc">Zinc grey</option><option value="slate" data-i18n="roofColor.slate">Slate</option><option value="terracotta" data-i18n="roofColor.terracotta">Terracotta</option><option value="copper" data-i18n="roofColor.copper">Green copper</option><option value="charcoal" data-i18n="roofColor.charcoal">Charcoal</option></select></label>
 <label class="inline" data-i18n-attr="title:tip.wallTone"><span data-i18n="label.wallTone">Wall colour</span> <select id="wWallTone"><option value="auto" selected data-i18n="wallTone.auto">Auto (by place)</option><option value="stone" data-i18n="wallTone.stone">Cream stone</option><option value="white" data-i18n="wallTone.white">White</option><option value="brick" data-i18n="wallTone.brick">Brick</option><option value="grey" data-i18n="wallTone.grey">Concrete grey</option></select></label>
+<label class="slider" title="Share of buildings with their own window style: tall French windows, ribbon bands, small or paired windows, and blank stairwell strips. 0 = every building uses the same window."><span>Facade styles</span> <input type="range" id="wFacadeStyles" min="0" max="100" step="5" value="60" /><output id="wFacadeStylesOut">60%</output></label>
+<label class="slider" title="Doors, arched alley passages and shop windows on the ground floor. 0 = windows only."><span>Doors &amp; passages</span> <input type="range" id="wFacadeOpenings" min="0" max="100" step="5" value="50" /><output id="wFacadeOpeningsOut">50%</output></label>
 <label class="slider" title="How different the windows are from each other: brightness and tint."><span>Window variety</span> <input type="range" id="wWinVariety" min="0" max="100" step="5" value="60" /><output id="wWinVarietyOut">60%</output></label>
 <label class="slider" title="Share of windows with curtains or blinds."><span>Curtains &amp; blinds</span> <input type="range" id="wWinCurtains" min="0" max="100" step="5" value="30" /><output id="wWinCurtainsOut">30%</output></label>
 <label class="slider" title="Sky reflected in the glass: the top of every window is lighter."><span>Glass reflection</span> <input type="range" id="wWinReflect" min="0" max="100" step="5" value="60" /><output id="wWinReflectOut">60%</output></label>
@@ -395,7 +398,16 @@
         </div>
 
         <div class="overlay bottom-left credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> / OpenFreeMap © OpenMapTiles / <span id="elevationCredit">Elevation: GSI Japan / Terrain Tiles</span></div>
+        <div class="overlay movepad" id="movePad" hidden>
+          <div class="pad-rise">
+            <button type="button" id="padUp" aria-label="Move up">▲</button>
+            <button type="button" id="padDown" aria-label="Move down">▼</button>
+          </div>
+          <div class="pad-stick" id="padStick" aria-label="Move: drag to walk"><div class="pad-knob" id="padKnob"></div></div>
+        </div>
         <div class="overlay bottom-right">
+          <label class="slider small speed" title="How fast WASD and the move pad travel."><span>Speed</span> <input type="range" id="moveSpeed" min="0.25" max="4" step="0.25" value="1" /><output id="moveSpeedOut">1×</output></label>
+          <label class="checks small" title="On-screen joystick for touch screens."><input type="checkbox" id="movePadToggle" /> <span>Move pad</span></label>
           <label class="inline small" data-i18n-attr="title:tip.controls"><span data-i18n="label.controls">Controls</span>
             <select id="controlMode">
               <option value="standard" data-i18n="ctl.standard">Standard</option>

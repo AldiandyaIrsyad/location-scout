@@ -622,13 +622,14 @@ $('shadowSide').addEventListener('change', applyOptions);
 $('lightBtn').addEventListener('click', () => ($('lightPop').hidden = !$('lightPop').hidden));
 
 function updAir() {
-  renderer.setAir({ shade: Number($('shade').value) / 100, haze: Number($('haze').value) / 100, sky: $('skyTone').checked, inkTint: Number($('inkTint').value) / 100, inkFade: Number($('inkFade').value) / 100 });
+  renderer.setAir({ shade: Number($('shade').value) / 100, haze: Number($('haze').value) / 100, sky: $('skyTone').checked, inkTint: Number($('inkTint').value) / 100, inkFade: Number($('inkFade').value) / 100, lineThin: Number($('lineThin').value) / 100 });
   requestRender();
 }
 bindRange('shade', pct, updAir);
 bindRange('haze', pct, updAir);
 bindRange('inkTint', pct, updAir);
 bindRange('inkFade', pct, updAir);
+bindRange('lineThin', pct, updAir);
 $('skyTone').addEventListener('change', updAir);
 
 let toneSeed = 0;
@@ -722,6 +723,59 @@ function loadPrefs() {
   syncSaveUI();
   refreshFolderName();
 }
+// Walking speed multiplier and the touch move pad (both remembered in this browser)
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const savedSpeed = Number(lsGet('moveSpeed'));
+if (savedSpeed >= 0.25 && savedSpeed <= 4) $('moveSpeed').value = String(savedSpeed);
+rig.speedScale = Number($('moveSpeed').value);
+bindRange('moveSpeed', (v) => `${v}×`, (v) => { rig.speedScale = v; lsSet('moveSpeed', String(v)); });
+
+function setupMovePad() {
+  const pad = $('movePad'), stick = $('padStick'), knob = $('padKnob'), toggle = $('movePadToggle');
+  const saved = lsGet('movePad');
+  toggle.checked = saved === null ? matchMedia('(pointer: coarse)').matches : saved === '1';
+  const show = () => { pad.hidden = !toggle.checked; if (pad.hidden) rig.setStick(0, 0, 0); };
+  toggle.addEventListener('change', () => { lsSet('movePad', toggle.checked ? '1' : '0'); show(); });
+  show();
+
+  const R = 60; // stick radius in px: full speed at the edge, a dead zone in the middle
+  let id = null, rise = 0;
+  const apply = (e) => {
+    const r = stick.getBoundingClientRect();
+    let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    const len = Math.hypot(dx, dy);
+    if (len > R) { dx = dx / len * R; dy = dy / len * R; }
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    const dead = (v) => (Math.abs(v) < 0.12 ? 0 : v);
+    rig.setStick(dead(dx / R), dead(-dy / R), rise);
+  };
+  const release = (e) => {
+    if (e.pointerId !== id) return;
+    id = null;
+    knob.style.transform = '';
+    rig.setStick(0, 0, rise);
+  };
+  stick.addEventListener('pointerdown', (e) => {
+    if (id !== null) return;
+    id = e.pointerId;
+    try { stick.setPointerCapture(id); } catch {}
+    apply(e);
+    e.preventDefault();
+  });
+  stick.addEventListener('pointermove', (e) => { if (e.pointerId === id) apply(e); });
+  stick.addEventListener('pointerup', release);
+  stick.addEventListener('pointercancel', release);
+
+  // rise / sink buttons: held while pressed, independent of the stick
+  for (const [btn, dir] of [[$('padUp'), 1], [$('padDown'), -1]]) {
+    const set = (v) => { rise = v; btn.classList.toggle('on', v !== 0); rig.setStick(rig.stick.x, rig.stick.y, rise); };
+    btn.addEventListener('pointerdown', (e) => { try { btn.setPointerCapture(e.pointerId); } catch {} set(dir); e.preventDefault(); });
+    for (const ev of ['pointerup', 'pointercancel']) btn.addEventListener(ev, () => set(0));
+  }
+}
+setupMovePad();
+
 $('controlMode').addEventListener('change', (e) => { rig.setMode(e.target.value); $('controlHint').textContent = hintText(); });
 $('controlHint').textContent = hintText();
 

@@ -502,11 +502,11 @@ const WINDOW_GLSL = `
     if (rel > 2.0 && ax * ax + ay * ay > 1.0) return vec3(0.0);
     return vec3(2.0, (fu - 0.6) / 1.8, rel / 2.9);
   }
-  // Visibility by projected width: focalPx * 1.6 m / depth. distant = 1 keeps windows down to ~1.5 px,
-  // distant = 0 fades them out below ~6 px.
+  // Visibility by projected width in CSS px: focalPx * 1.6 m / depth. distant = 1 keeps windows down to ~3 px
+  // (smaller ones turn into moire and broken dashes under the line pass), distant = 0 fades them out below ~6 px.
   float windowFade(float focalPx, float depth, float distant) {
     float px = focalPx * 1.6 / max(depth, 0.5);
-    return mix(smoothstep(5.0, 7.0, px), smoothstep(1.2, 2.0, px), distant);
+    return mix(smoothstep(5.0, 7.0, px), smoothstep(2.6, 3.8, px), distant);
   }
 `;
 
@@ -544,7 +544,7 @@ const ND_VERT = `
 `;
 const ND_FRAG = `
   uniform float uFar;
-  uniform float uFocalPx;   // focal length in target px
+  uniform float uFocalPx;   // focal length in CSS px (target px / render scale)
   uniform float uWinDist;   // 1 = keep distant windows, 0 = fade them out below ~6 px
   varying vec3 vN;
   varying float vDepth;
@@ -644,9 +644,13 @@ const COMPOSITE_FRAG = `
   // Inverse depth is linear in screen space across a flat surface, so each opposite neighbour pair is
   // tested for deviation from that line. A plain depth difference reads ground at a grazing angle
   // (steep depth gradient near the horizon) as one solid silhouette.
-  float depthEdge(vec2 uv, float r) {
+  // With nearSide > 0 the line is kept only on the nearer surface of a silhouette: a line one pixel wide that
+  // sits on the thing it outlines instead of a three pixel band spread over both sides. Far lattice towers
+  // keep their open gaps that way.
+  float depthEdge(vec2 uv, float r, float nearSide) {
     float i0 = 1.0 / max(texture2D(tND, uv).a, 1e-4);
     float e = 0.0;
+    float nearest = i0;
     for (int k = 0; k < 8; k += 2) {
       // DIRS pairs: (0,1) (2,3) (4,7) (5,6) are opposite directions.
       int a = k < 4 ? k : (k == 4 ? 4 : 5);
@@ -655,8 +659,11 @@ const COMPOSITE_FRAG = `
       float ib = 1.0 / max(texture2D(tND, uv + DIRS[b] * uTexel * r).a, 1e-4);
       float rel = abs(ia + ib - 2.0 * i0) / max(max(ia, ib), i0);
       e = max(e, smoothstep(0.03, 0.07, rel));
+      nearest = max(nearest, max(ia, ib));
     }
-    return e;
+    // inverse depth: a bigger value is nearer, so a pixel with a nearer neighbour is on the far side of the edge
+    float farSide = smoothstep(0.02, 0.06, (nearest - i0) / nearest);
+    return e * (1.0 - farSide * nearSide);
   }
 
   // Crease / normal discontinuity, 0..1
@@ -1209,7 +1216,7 @@ const COMPOSITE_FRAG = `
     float thin = uThin.x * smoothstep(12.0, 160.0, dN * uFar);
     float rOuter = mix(uOuter, min(uOuter, uThin.y), thin);
     float rInner = mix(uInner, min(uInner, uThin.y), thin);
-    float ink = max(depthEdge(vUv, rOuter), creaseEdge(vUv, rInner));
+    float ink = max(depthEdge(vUv, rOuter, thin), creaseEdge(vUv, rInner));
     vec2 pix = gl_FragCoord.xy;
     bool sky = dN >= 0.999;
     // far lines get lighter (atmospheric perspective): full strength within 40 m, down to (1 - fade) past 450 m
@@ -6038,9 +6045,10 @@ export class CityRenderer {
     // window grid uniforms (edge pass, lit and colour building materials)
     const focal = (0.5 * h) / Math.tan((cam.fov * DEG) / 2);
     const winDist = this.options.distantWindows ? 1 : 0;
-    this._focalU.value = focal;
+    // the window fade counts CSS pixels, so a hi-res export or a hi-DPI screen keeps the same windows as the preview
+    this._focalU.value = focal / scale;
     this._winDistU.value = winDist;
-    M.ndMat.uniforms.uFocalPx.value = focal;
+    M.ndMat.uniforms.uFocalPx.value = focal / scale;
     M.ndMat.uniforms.uWinDist.value = winDist;
     this._setPartUniforms(w, h, focal, T);
     const saved = { bg: scene.background, fog: scene.fog, ov: scene.overrideMaterial, mask: cam.layers.mask };

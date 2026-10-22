@@ -502,11 +502,11 @@ const WINDOW_GLSL = `
     if (rel > 2.0 && ax * ax + ay * ay > 1.0) return vec3(0.0);
     return vec3(2.0, (fu - 0.6) / 1.8, rel / 2.9);
   }
-  // Visibility by projected width in CSS px: focalPx * 1.6 m / depth. distant = 1 keeps windows down to ~3 px
+  // Visibility by projected width in CSS px: focalPx * 1.6 m / depth. distant = 1 keeps windows down to ~4 px
   // (smaller ones turn into moire and broken dashes under the line pass), distant = 0 fades them out below ~6 px.
   float windowFade(float focalPx, float depth, float distant) {
     float px = focalPx * 1.6 / max(depth, 0.5);
-    return mix(smoothstep(5.0, 7.0, px), smoothstep(2.6, 3.8, px), distant);
+    return mix(smoothstep(5.0, 7.0, px), smoothstep(3.6, 5.4, px), distant);
   }
 `;
 
@@ -615,6 +615,7 @@ const COMPOSITE_FRAG = `
   uniform vec2 uSkyTone;    // lines + tone: sky screentone strength and how far down from the zenith it reaches
   uniform vec2 uInk;        // ink tint toward the local colour (colour + lines), ink fade with distance
   uniform vec2 uThin;       // x: how far line radii shrink with distance (0..1), y: smallest radius in target px
+  uniform float uHaze;      // lines + tone: how much the tone thins out with distance (the Haze slider, 0..1.5)
   varying vec2 vUv;
 
   const vec2 DIRS[8] = vec2[8](
@@ -1241,6 +1242,9 @@ const COMPOSITE_FRAG = `
     // Tone: paper everywhere except the toned (shade / cast shadow) regions. The sky is always paper.
     float tone = 1.0;
     bool blk = false;
+    // Aerial perspective for the tone: from about 250 m the screentone thins out (smaller dots), so a far skyline
+    // reads as a light silhouette instead of the darkest, busiest part of the page.
+    float farT = min(uHaze, 1.0) * 0.9 * smoothstep(250.0, 1800.0, dN * uFar);
     if (uMode == 1 && !sky) {
       vec3 lit = texture2D(tColor, vUv).rgb;
       float L = litLum(lit);
@@ -1258,12 +1262,19 @@ const COMPOSITE_FRAG = `
           float shadeT = 1.0 - smoothstep(0.3, 0.9, L);
           tone = toneVal(0.3 + 0.45 * shadeT, pix);
         }
-      } else if (uBlack > 0.0 && L < uBlack) {
-        blk = true;                                       // solid cast-shadow black
-        tone = (uPat == 3 || uPat == 12) ? toneVal(1.0, pix) : 0.14;   // blackflash / blackedge keep their pattern
       } else {
+        // One toneVal call for the cast-shadow black and the ordinary tone: every call inlines the whole pattern
+        // table, and a third copy here made the shader fail to validate.
+        bool keep = (uPat == 3 || uPat == 12);           // blackflash / blackedge keep their pattern
+        bool black = uBlack > 0.0 && L < uBlack;         // solid cast-shadow black
         float C = 0.0;
-        if (L <= 0.62) {                                  // toned region only: shadow, base tone and AO
+        float cMax = 0.9;
+        bool dots = true;
+        if (black) {
+          if (keep) { blk = true; C = 1.0; cMax = 1.0; }
+          else if (farT > 0.0) C = mix(0.95, 0.3, farT);  // far: the black turns into dots that thin out with distance
+          else { blk = true; tone = 0.14; dots = false; }
+        } else if (L <= 0.62) {                          // toned region only: shadow, base tone and AO
           float lightBand = 1.0 - smoothstep(0.45, 0.62, L);
           float deepBand = 1.0 - smoothstep(0.30, 0.45, L);
           C = (TONE_LIGHT * lightBand + TONE_DEEP * deepBand) * uShadow;
@@ -1272,8 +1283,9 @@ const COMPOSITE_FRAG = `
             C += uBase * 0.5 * clamp((0.45 - al) / 0.45, 0.0, 1.0);
           }
           C += uShade * ao * 0.25;
+          C *= 1.0 - 0.85 * farT;
         }
-        tone = toneVal(clamp(C, 0.0, 0.9), pix);
+        if (dots) tone = toneVal(clamp(C, 0.0, cMax), pix);
       }
     }
 
@@ -5928,6 +5940,7 @@ export class CityRenderer {
         uSkyTone: { value: new THREE.Vector2(0, 0.5) },
         uInk: { value: new THREE.Vector2(0, 0) },
         uThin: { value: new THREE.Vector2(0, 1) },
+        uHaze: { value: 0 },
       },
       depthTest: false,
       depthWrite: false,
@@ -6145,6 +6158,7 @@ export class CityRenderer {
       this._setCloudUniforms(u, cloudsOn, style === 'color' || style === 'color-lines');
       u.uInk.value.set(air.inkTint, air.inkFade);
       u.uThin.value.set(air.lineThin, scale);
+      u.uHaze.value = air.haze;
       r.setRenderTarget(compTarget);
       r.clear(true, true, true);
       r.render(this._quadScene, this._quadCam);

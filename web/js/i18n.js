@@ -178,7 +178,7 @@ export const DICT = {
     "label.shade": "Shade",
     "tip.shade": "Darkens nooks, under eaves and between buildings.",
     "label.haze": "Haze",
-    "tip.haze": "In the color modes, distant objects fade toward the sky color.",
+    "tip.haze": "In the color modes, distant objects fade toward the sky color. In lines + tone the screentone thins out with distance.",
     "label.sky": "Sky",
     "tip.sky": "Light from the sky: shadows get a slight cool tint in the color modes.",
     "h.tone": "Tone",

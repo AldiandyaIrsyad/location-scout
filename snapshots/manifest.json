@@ -1,0 +1,1571 @@
+{
+  "version": 1,
+  "places": [
+    {
+      "name": "Akihabara, Tokyo",
+      "lat": 35.6984,
+      "lon": 139.7731,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "e9d08adfd524caca6f45a0afa58c8a9c8ef424f32e2ca0bac2584ee1ac0983eb.gz",
+          "bytes": 500134
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "687a9bdb351981c6b1c3e1151c70b74ad3ffc9960b9fe5402aa03f39bf82c56a.gz",
+          "bytes": 14348356
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14553/6450.png",
+          "file": "f73fbf7d6392d0c1a81a6c769a804917621f767bd14f98ca40202cfa3fd71911.gz",
+          "bytes": 62048
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14552/6451.png",
+          "file": "ef12446eb665df6cc65456180e2813edf7052de507d15393834412133d431896.gz",
+          "bytes": 74594
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14553/6451.png",
+          "file": "96cd2afb7e41ec396faa8db039f0e08fd0cefbfb94a1a0360d5a01f6f425b99d.gz",
+          "bytes": 64268
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14552/6450.png",
+          "file": "876b40f54f826d31b0f8bf42d1b7cbc2b6db1f22151d7ddbc91ad1bcf6c974a8.gz",
+          "bytes": 76673
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14553/6451.png",
+          "file": "4b0cb8882c37fd842b7456624c4775c78069f7e0cc6c6f12090537d918a07331.gz",
+          "bytes": 17842
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14553/6450.png",
+          "file": "84464b9992a9319d41a6881920fc5ca1f35e2fec859d8276c99c5fc0b5af85c0.gz",
+          "bytes": 22695
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14552/6450.png",
+          "file": "5b5f971b6fdec876809547f73a668dcb2461c60ccedfefbe31d6066d6688d00a.gz",
+          "bytes": 56261
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14552/6451.png",
+          "file": "085902f1b96d01559dcf1b70159677d3c7d6edff1b56561cba80b5e620a868de.gz",
+          "bytes": 50651
+        }
+      ]
+    },
+    {
+      "name": "Big Ben, London",
+      "lat": 51.5007,
+      "lon": -0.1246,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "c4f12eb4321683e9c18ae4ef46e3bb8cf7dc1f296849830c9063c0b8fe99fef7.gz",
+          "bytes": 1263929
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "2644f35d4c441f0b18274dae77211cdd68656df5028da1f9641171d4ca43dd2c.gz",
+          "bytes": 11147066
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8186/5448.png",
+          "file": "04b97242cfafb5e9d26cb1c2c5cce595e391e8336d7cf3e75e2922b43ae03c99.gz",
+          "bytes": 72832
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8186/5449.png",
+          "file": "c631297fb2ca16184319d7c5d220607e4280978c2f64181369270afd8bc556a9.gz",
+          "bytes": 66765
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8185/5447.png",
+          "file": "ce05c8a428929e47fdcf6e64f2054b21385b1104d5f133615ad1c36b9b622db8.gz",
+          "bytes": 79899
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8185/5449.png",
+          "file": "bfe780654fa7c1fcbe24ddd4f08976e4dbb5028e0c2c988e1da0bfc0804c3556.gz",
+          "bytes": 78863
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8185/5448.png",
+          "file": "a68f35a26b605aad1d6b95c7875e6cfd8a4749391210c2d5f2922201bcaaa540.gz",
+          "bytes": 79689
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8186/5447.png",
+          "file": "cf8cc70b62fa23d227c310af5f5d20b25ed97b50737b50c7125d405cac76cf54.gz",
+          "bytes": 79273
+        }
+      ]
+    },
+    {
+      "name": "Brandenburg Gate, Berlin",
+      "lat": 52.5163,
+      "lon": 13.3777,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "7ee44f68ffe04e0d0d4ab68e534b66798d1d45ea9d5dfef97d7e74618e7b1f38.gz",
+          "bytes": 658692
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "0a40ac3f32cf6a9b509dad91f6e81d7bbd9384c9d85f4f5257f4385d19eae5d6.gz",
+          "bytes": 12687209
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8800/5374.png",
+          "file": "f7d405678d2d6e2bd8bcce86f6dbce8b223aee04e452a2c1084968da3a25624e.gz",
+          "bytes": 63065
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8800/5372.png",
+          "file": "a9eb40224e75bea713d38295a4676335c185889b4708e1378f3acae4bf3f26fb.gz",
+          "bytes": 64108
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8800/5373.png",
+          "file": "dc3b4ed8957a98ed68a27c70c8c049128f930126a47faa8fa36cbef528777f42.gz",
+          "bytes": 69306
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8801/5373.png",
+          "file": "3c568fd9c863bf5bf52aef99f10535630d73e46af11473c4c761119a2214ae16.gz",
+          "bytes": 76129
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8801/5374.png",
+          "file": "5c5bc49b0c14124f6bd6ca798c9412a717117f17f31e1be01ebee0f9a80a2f80.gz",
+          "bytes": 64997
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8801/5372.png",
+          "file": "989787d07b885efcc4d352b8de0eace6fcf17d02626d2afa0c26afe0c515c897.gz",
+          "bytes": 63770
+        }
+      ]
+    },
+    {
+      "name": "Brooklyn Bridge, New York",
+      "lat": 40.7061,
+      "lon": -73.9969,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "054aa9bb0066f28e7d1bfc69ecddeed83c68123f83ccd0fbcf1fb8ea8dda0231.gz",
+          "bytes": 9458
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "d019ef3880f8d528c350cc648375afc1e4d0014c89c00fb027fe00b8cf125c89.gz",
+          "bytes": 10229473
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/4823/6161.png",
+          "file": "cc68bd885b65ba32af4402dc5f969a1390f2d4cb6603f5a68903f3ca051bbbe8.gz",
+          "bytes": 59256
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/4824/6160.png",
+          "file": "3fd54db1b7aaae51cc6ca010431862ef7eddcc47c7bc1e69c240cd0560a24d8e.gz",
+          "bytes": 68617
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/4823/6159.png",
+          "file": "442971c6c95c22b75556d23d8c9b33cc89850d9479f2ea639a2ae8aedbab457f.gz",
+          "bytes": 60860
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/4823/6160.png",
+          "file": "d0d24b49aceda81c5bc0317e5c549915b1bfec2621002f5c026304f88695f187.gz",
+          "bytes": 68728
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/4824/6159.png",
+          "file": "14a0ccceb617ec20c5bf1c9dd036655cd56186b6f8f64cb3172033b1620f43a7.gz",
+          "bytes": 66063
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/4824/6161.png",
+          "file": "b6be83237a812f027d0ccdaac91ea4488cf102ab3f51e5d310de3ca04fee7743.gz",
+          "bytes": 76004
+        }
+      ]
+    },
+    {
+      "name": "Bundaran HI, Jakarta",
+      "lat": -6.1951,
+      "lon": 106.8231,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "b60eff2d9f1339b18f42ed1a1f046672916120b0b07742300cf5590b345e36ca.gz",
+          "bytes": 230010
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "9c33dd74e0395b1357c74b5f33ca6ec1e262071e43c6f7b6939d0623a53c4204.gz",
+          "bytes": 5141509
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13053/8474.png",
+          "file": "9817c79b228c677b02891c321ec61bdd1fdb3811d6cf6163ec257e117fa53e0c.gz",
+          "bytes": 102364
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13054/8474.png",
+          "file": "fe46778ea6cb5134f7a61724c5ed237c14e79cf4186299b33357ef341cec1831.gz",
+          "bytes": 98734
+        }
+      ]
+    },
+    {
+      "name": "Burj Khalifa, Dubai",
+      "lat": 25.1972,
+      "lon": 55.2744,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "3c945ae682d7b5a60b4f14e59c7c98ef015adc905f0ccae73382f4dce46e6b1f.gz",
+          "bytes": 307001
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "c412db6c2a554b40d10621daed96ddfa8b44c41c8ff7d8d92356ce36b766756f.gz",
+          "bytes": 3458516
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/10707/7006.png",
+          "file": "67e078a963c3b703ff9e036ce7a7322fc26847db0d4455584067023826ea6bf4.gz",
+          "bytes": 84866
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/10708/7006.png",
+          "file": "25064b2f369853522e967a4197d6855bd78b64dab4e83dacd8ac09ab87834499.gz",
+          "bytes": 84594
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/10708/7005.png",
+          "file": "874b97d9fd6faa0a537756a1fc0ea1b0b578411e937f1ad2b13f9c20ce096ee5.gz",
+          "bytes": 84499
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/10707/7005.png",
+          "file": "7c99cf4599521ad24aa5a8c0dae13104057f5fb5b93106a19eb93fcae29129cb.gz",
+          "bytes": 81127
+        }
+      ]
+    },
+    {
+      "name": "Colosseum, Rome",
+      "lat": 41.8902,
+      "lon": 12.4922,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "a548ff3335f42959e32da68e84253278de4906795711c42905e662270e48807d.gz",
+          "bytes": 541701
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "88242c5f7b3f27941bbe8b340c2d284fec5c4cba30e1d17d153a44faa1fa30c7.gz",
+          "bytes": 11963403
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8761/6089.png",
+          "file": "f07b24d462b353d54853b3900b90ab0c98a2f5bc18fb9dbda698b5640a56f0b6.gz",
+          "bytes": 85965
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8760/6088.png",
+          "file": "0c1c11e930764e0098d28032c028ed49552578a8d945aefd4b46d16855774d07.gz",
+          "bytes": 91494
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8761/6088.png",
+          "file": "e11db835c5b7dbeed3ce197686d879b65d811004caec32809f3e28e1fbaed58d.gz",
+          "bytes": 83288
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8760/6089.png",
+          "file": "460997c3fa955723ca74871ede678f668dcc2378ed202ba4446ec24708332818.gz",
+          "bytes": 89841
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8759/6089.png",
+          "file": "d74f594a152ab62f36e3e51cf93b958d9c9a88fbef4b1a46b0beb02cb81307cb.gz",
+          "bytes": 90910
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8759/6088.png",
+          "file": "38621659b13029c6c266715a925fd424daa0ca8aff26e0b3d550a39d915d384a.gz",
+          "bytes": 91107
+        }
+      ]
+    },
+    {
+      "name": "Eiffel Tower, Paris",
+      "lat": 48.8584,
+      "lon": 2.2945,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "a7195c428a0ffa9a4b62f907dca429c78328c65e68a31aae6f3ad30037dab113.gz",
+          "bytes": 455870
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "a23399bbc6d9b159a279c358bcff758d468810c7c9bf006a9c714000fc5c64ae.gz",
+          "bytes": 13243021
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8297/5636.png",
+          "file": "d2df61fe5f63b62e938fadc9d0e77879a9a878b720b1ca225e42c805c599bc25.gz",
+          "bytes": 78168
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8296/5637.png",
+          "file": "d5f5a596a83dd2bb6e883ec1e70d02c2d3c9390a0ef53e111df707ce71a441c8.gz",
+          "bytes": 75486
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8297/5637.png",
+          "file": "4faaa534a7e052973d30e10725b010ba27772c413d4321a0c1290cc8ab8ee13a.gz",
+          "bytes": 81911
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8295/5635.png",
+          "file": "fb60d317177dcd510819d4d87bc5825f0358bce36f8bda2fe6840f82e9a24411.gz",
+          "bytes": 81744
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8295/5636.png",
+          "file": "65829f58631f6a821cb23f0ac49ff7a30366a623801abd52b4500ff6b7b7a5cc.gz",
+          "bytes": 84093
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8297/5635.png",
+          "file": "4228f9c95a212785340a75599bdc0c588f7cbf0309ca69b8914a77bb7fc1987c.gz",
+          "bytes": 80569
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8295/5637.png",
+          "file": "5631d1d34f328c8029be500d92b0ea95795f9aee3f835f65052804171365c54b.gz",
+          "bytes": 85919
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8296/5635.png",
+          "file": "3cadf7971e72f8913ace6eb184790a2033a24736ff42653d30d04e250e2d4c3e.gz",
+          "bytes": 83102
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8296/5636.png",
+          "file": "37bf264ba32298f9b5ab26bd8313c39ece1440df9500d4613be3955b1dd89fed.gz",
+          "bytes": 85894
+        }
+      ]
+    },
+    {
+      "name": "Gangnam Station, Seoul",
+      "lat": 37.4979,
+      "lon": 127.0276,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "1f021523c924a78f3d5094f0b69201f38d688131719dfeb46de383329fd81b9a.gz",
+          "bytes": 140622
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "6b96527a31b778963a1f993b3828424661d02cfcd6410f5b5dfae54ba72e3a9c.gz",
+          "bytes": 3227174
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13972/6348.png",
+          "file": "56fc827e89c4724d67d2871f83d974c1351441a0d966c4250df82b4a33b412b5.gz",
+          "bytes": 85361
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13973/6348.png",
+          "file": "b12d36043089828543e48e6c19993ab55451a47a20f96dd182f29e74e7ed95fe.gz",
+          "bytes": 86412
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13972/6349.png",
+          "file": "98530d9847de2dc8b81e63796dce97890c6773fb609b4056be7cd73b7ef13c5f.gz",
+          "bytes": 87865
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13973/6349.png",
+          "file": "d57bb8a5a75aff1c0f73ee169f46aa6b925b1d373c125283112869937132d71e.gz",
+          "bytes": 104760
+        }
+      ]
+    },
+    {
+      "name": "Gedung Sate, Bandung",
+      "lat": -6.9025,
+      "lon": 107.6186,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "4d287dd5aae6f432a75e3dcbd1741c326ff57b0abc20b76afbaa12ab57be30eb.gz",
+          "bytes": 102345
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "fd90b716c56b79dc2b0bb5de8b33ca35c5b468ff1da039fe9944195e1638c040.gz",
+          "bytes": 4820789
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13089/8506.png",
+          "file": "c7affb68fc5e79382301d231d9bf7e0e0b17c46c6adb90fef17be6bf75d78cd6.gz",
+          "bytes": 98285
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13090/8507.png",
+          "file": "c29fd1ae8e89018e512124a4049d62791ea299e7030a355e0e745c370a9cf856.gz",
+          "bytes": 94520
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13089/8507.png",
+          "file": "de7f80e71a25be3bb108dc07228fc418401b0e58a41a8b97a7f4dc0556da3da7.gz",
+          "bytes": 95728
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13090/8506.png",
+          "file": "85a3d120a12bf0f8c2ccf2471403f98f03a7e2e43f109e2576195122d7425dff.gz",
+          "bytes": 98592
+        }
+      ]
+    },
+    {
+      "name": "Golden Gate Bridge, San Francisco",
+      "lat": 37.8199,
+      "lon": -122.4783,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "f103663ab91156b0f2c4822ca1b1f36bdfab143197829d1bcb17b2866ece357d.gz",
+          "bytes": 9649
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "833cf0d28bb7d0a01cb7fd8d17931c93b6c8f4c716deea8308c8d9c4e4e04526.gz",
+          "bytes": 495852
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/2618/6329.png",
+          "file": "e003bcf5f57d271e5dcc8f02863ab9dee831d2762e2838c0c5b3929802d2a238.gz",
+          "bytes": 94515
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/2618/6330.png",
+          "file": "ae6da54c57bbd2cd1a65988d78ddbbf7a53e9e484cfb85ad4121f8ec0c411a4b.gz",
+          "bytes": 94503
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/2617/6330.png",
+          "file": "57a3beb1e5c1e38abe211ae4be1ce3ba9a07edc6499a9f1253b07184e7361b88.gz",
+          "bytes": 99693
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/2617/6329.png",
+          "file": "bc1eeabaff964b3c24473d6f15351500f3266e7b61ee540b706a689646af0b1b.gz",
+          "bytes": 113295
+        }
+      ]
+    },
+    {
+      "name": "Gwanghwamun Square, Seoul",
+      "lat": 37.5759,
+      "lon": 126.9768,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "a941cecf82ef58d3c07f1d7476e8edd838dbbfea3814c53f4516c12e1d9b8fee.gz",
+          "bytes": 200153
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "ab29b231117cd8bcd5b2e512fa639bffdb6f4216fee67c1d320a3ff34c1a50dc.gz",
+          "bytes": 7537653
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13971/6343.png",
+          "file": "d3b7721ec752f82a7f552ae5cbb86725df6a98f2b19745571a677ca7fe3c54b2.gz",
+          "bytes": 88719
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13970/6344.png",
+          "file": "cd79677b7af0053a7756d65e58271f914b9d320696e32e3429606bb10f9ce91a.gz",
+          "bytes": 90372
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13971/6344.png",
+          "file": "d44c6ef96dfec1d48bf5aa6b5d582152a8838aca330f72478c096f4852ca994b.gz",
+          "bytes": 87981
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13970/6343.png",
+          "file": "098479e4f9ba6a19f5a07b48eec314e010ef75441be1a7fcefa508fdfb9b951a.gz",
+          "bytes": 97553
+        }
+      ]
+    },
+    {
+      "name": "Hagia Sophia, Istanbul",
+      "lat": 41.0086,
+      "lon": 28.9802,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "4ca9442ae5f9f0d73a2c0a3e3cdee30c1a5a797364a265eacfe1d9376eb06170.gz",
+          "bytes": 227119
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "1723884ebecf671f4309bc355e63803b8d880aa420a6cfbaf68de3389a3dc561.gz",
+          "bytes": 3812331
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/9511/6141.png",
+          "file": "e2f802b4b04c61eec3ba110eb6c4015937cac6078cbcbf60ab96702c8ea95702.gz",
+          "bytes": 17663
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/9511/6142.png",
+          "file": "a4c7c7441da052f7bb3c97eb91d86d976d8fb2e7e5d45c934e232330d2e6d3fa.gz",
+          "bytes": 16206
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/9510/6142.png",
+          "file": "79b95c14b8afb75e2eede1c01cfd8d92a705d54a5ea2be017d7b73e672d6ce5b.gz",
+          "bytes": 65887
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/9510/6141.png",
+          "file": "687ff5bdd45d397f2fbdfa4d50cfab40b9c58737f94e7cc8139ef4e127c30dce.gz",
+          "bytes": 72456
+        }
+      ]
+    },
+    {
+      "name": "Hongdae, Seoul",
+      "lat": 37.5563,
+      "lon": 126.9236,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "ddc4ab5e24d7c63bced2c8467d5958dff2de093ffc6ad2a4fdabf8a21ca6c5d8.gz",
+          "bytes": 189663
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "bcb11ac1965ef01607fa13d4d804bd009f8a4326d8aa8401be731d68713846e6.gz",
+          "bytes": 8100597
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13967/6344.png",
+          "file": "36ffe4d0affa5319a49fa89863df3ea6649301a91d2dbfb14c4bd7be60a6d14f.gz",
+          "bytes": 79080
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13968/6345.png",
+          "file": "136b4b1dadb3c85682da12bed8544b858811315d27068b5695060ea3bba97346.gz",
+          "bytes": 76323
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13967/6345.png",
+          "file": "56791a4441860f579e1adfcfea4e2c0a3e7880143dc818419a81bd053d0458e1.gz",
+          "bytes": 68147
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13968/6344.png",
+          "file": "7dd32f5e5b1c9327eec0d35cd455061647215cc1dfd7edee94f88f005855a794.gz",
+          "bytes": 79405
+        }
+      ]
+    },
+    {
+      "name": "Kamakurakokomae Railroad Crossing",
+      "lat": 35.3066013,
+      "lon": 139.5020923,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "d4a4279634c1866038aad10f84e5e757043dfd50351fe1c81431f7bfed576a07.gz",
+          "bytes": 61652
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "ad247355f385b5d6ecebd743cc79964ba6a6c94e7f02a251f59df41f30a79c5d.gz",
+          "bytes": 3867457
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14540/6473.png",
+          "file": "84c3c872beb932e171047572bd3b52c20974cf99b227db32fc704125b9e9fb70.gz",
+          "bytes": 2738
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14541/6472.png",
+          "file": "e71d428759e127d663ab042b1a6a7a0b8926bfae93ed0a3eae5985ab18b668c6.gz",
+          "bytes": 77599
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14540/6472.png",
+          "file": "672e85e936f8e8c424ba63b407d4ba6280bbf72eb21486c4db68ad0571e0b7bb.gz",
+          "bytes": 59441
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14541/6472.png",
+          "file": "ee88ff2c6b1152e602def9a674173560d4b92b630cfc15054c8279cf416f7b0f.gz",
+          "bytes": 72155
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14540/6473.png",
+          "file": "302b68eee5c347383c4aa1c2bc33378becdb79856c2c11e2caab92d16ccd0b9d.gz",
+          "bytes": 2822
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14540/6472.png",
+          "file": "1766306190c1b7d125a6fe2a2419364eddc441c11e3f4095897346b7f5e5a632.gz",
+          "bytes": 50478
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/14540/6473.png",
+          "file": "3898f9b1c4d06cee1485c5d91602bc60b39203920ea5abd7d6d9dadab31f255c.gz",
+          "bytes": 7903
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/14541/6473.png",
+          "file": "fc0a303db82851b240d53c554ebb20a32fc381e31e09fedc26126eaac98a41a4.gz",
+          "bytes": 4246
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/14540/6472.png",
+          "file": "455f1e378c943cb6b42f53d6d95dddede3c853951c12dbc345bafd66a294130d.gz",
+          "bytes": 64070
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/14541/6472.png",
+          "file": "bfa74d3a8e8909166026f913e7b9d8880675b317a61a5d1da585ee670363fd28.gz",
+          "bytes": 79315
+        }
+      ]
+    },
+    {
+      "name": "Kota Tua (Fatahillah Square), Jakarta",
+      "lat": -6.1352,
+      "lon": 106.8133,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "f2a77f77724e922d8d8f897e52265b0917b3725764065f302c38816a2ede5ee4.gz",
+          "bytes": 104291
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "18742d8d70b25658bd5f5262245ad68a0251ae462349427a4fa15cc6e5977830.gz",
+          "bytes": 8045753
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13053/8472.png",
+          "file": "cbf775eeee7358eb0c0384723a644cce8e2d19414c09917e5294de4e2766aca5.gz",
+          "bytes": 78138
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13052/8472.png",
+          "file": "71c00466f381a1372cc7b4dcd91dadcfa0e70945f63ca6b7a3e4182037d2e2aa.gz",
+          "bytes": 75043
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13053/8471.png",
+          "file": "af900dd44174cfeb0aa4c38adde6f8915b3b5fcb38785f48b617466e37cd0d93.gz",
+          "bytes": 78841
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13052/8471.png",
+          "file": "777e3acb35f9aad903179e396cec6dcd2221372afd82074a15d5f085ebd4f642.gz",
+          "bytes": 73368
+        }
+      ]
+    },
+    {
+      "name": "Kyoto Fushimi Inari Shrine",
+      "lat": 34.9671,
+      "lon": 135.7727,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "35e50652734a7d85fb5b6b569e7271cd4336b6630174f496c9bdbca90acb7b06.gz",
+          "bytes": 343065
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "4573fbacc45aeb7b74e92aac725a871f467e69d82532135aef9b1ca1c77c2dcd.gz",
+          "bytes": 7830314
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14371/6490.png",
+          "file": "6a07c20ac4ea39cbedfc1e34ae33fc3a4bb1daad9936b8c2b7e4d191f58f0206.gz",
+          "bytes": 97113
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14370/6491.png",
+          "file": "55d4416467dc0efd38bd93684b3749b9986fbfac4fb13cb77fc5a257684cb669.gz",
+          "bytes": 71828
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14370/6490.png",
+          "file": "ad963149291406d3ab9c83db24a3943172a963e0ef123a73cf29127d5418b2f5.gz",
+          "bytes": 66903
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14371/6491.png",
+          "file": "e83ccfa6b0bab9f1da970f42661a3c9a862ca2981ebed51a9a4197bd31cb48f0.gz",
+          "bytes": 98711
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14371/6491.png",
+          "file": "9a3364f39d4994e7401eb3a43a0eb71b4001c1752bda137cebdf619047170692.gz",
+          "bytes": 92190
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14370/6490.png",
+          "file": "e25088bc0ffd19cae6e12cc3cb32a99c903c4aef99e1af50db221a70a6247db6.gz",
+          "bytes": 32357
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14371/6490.png",
+          "file": "bac2f6e83e8084fac5e6df47f03a688cc9f2183dfd3095de723dc49ad94e19a9.gz",
+          "bytes": 89943
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14370/6491.png",
+          "file": "a272ea251ce2140debd0ab57ca168affac38c598ee6f28136ee79c0c43b87e45.gz",
+          "bytes": 41153
+        }
+      ]
+    },
+    {
+      "name": "Louvre Pyramid, Paris",
+      "lat": 48.861,
+      "lon": 2.3359,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "7b2d997ea1461a5e366046b70e7b6775e05944a97763ffc835e2814287e09a42.gz",
+          "bytes": 542830
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "3d4d189d189f4a672a09bd89f4dce32eae77b01b23203999eb2f202bf6645a20.gz",
+          "bytes": 17257324
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8298/5635.png",
+          "file": "6b54486949cb51e3aa44fe320a6ec469a3ae22402cbbc3bcd1918b99266d21aa.gz",
+          "bytes": 74615
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8297/5636.png",
+          "file": "d2df61fe5f63b62e938fadc9d0e77879a9a878b720b1ca225e42c805c599bc25.gz",
+          "bytes": 78168
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8297/5635.png",
+          "file": "4228f9c95a212785340a75599bdc0c588f7cbf0309ca69b8914a77bb7fc1987c.gz",
+          "bytes": 80569
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8298/5636.png",
+          "file": "66595913b1f81c9e493e971add619f85497e2e9a84372ef52b37560dd2dafd4d.gz",
+          "bytes": 86937
+        }
+      ]
+    },
+    {
+      "name": "Malioboro, Yogyakarta",
+      "lat": -7.7926,
+      "lon": 110.3658,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "81047e50aa8be059f7dae2f9997f6ac2402870602921fbdc2bddc0988fc11e42.gz",
+          "bytes": 219507
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "3fd78568a910e7e6ef1d294c15d9a12e0d584969673b9a9008981d3e65a771b1.gz",
+          "bytes": 10377409
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13215/8548.png",
+          "file": "77d46c334772a9d569b0e64f281fb6a029230bd4711347406ff58813a67faa7a.gz",
+          "bytes": 94269
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13214/8548.png",
+          "file": "22cb0f5817f6d1213a3082dcd1b931087264ac4e73ecf5e62a05c64b596cc8f2.gz",
+          "bytes": 94903
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13215/8547.png",
+          "file": "210bf4e808a641563d7830e81ace92046c89ba4e0ad744bd818af70d5e316dc6.gz",
+          "bytes": 95100
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13214/8547.png",
+          "file": "3bd3eb9ced0ffb3965e3e173318f374871dc5abd0a109bf248b7c24045598900.gz",
+          "bytes": 95222
+        }
+      ]
+    },
+    {
+      "name": "Marina Bay Sands, Singapore",
+      "lat": 1.2834,
+      "lon": 103.8607,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "5e02387ddab2ef55a19de2768f61c40fe0b4e431b978dc4aa1fd206e30ba1203.gz",
+          "bytes": 133993
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "6b66e68b07c1838542e3923049b92341b5d342d6bdb193b8648e7a77b15aff5c.gz",
+          "bytes": 2922248
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/12919/8133.png",
+          "file": "2d8af30ec9c6d89d5b96e05e10c9efeffa9ff4ae4d75e35b7bedcafdf1548503.gz",
+          "bytes": 70612
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/12918/8133.png",
+          "file": "93892f82be44eb5f8515ea7313fcfb24910af68eafd8a289f169aa6ecd30918e.gz",
+          "bytes": 106976
+        }
+      ]
+    },
+    {
+      "name": "Monas, Jakarta",
+      "lat": -6.1754,
+      "lon": 106.8272,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "437c77f2e1dc74e97bec647222936abe112afb8aaa8f6d7eb4471167291ad1b9.gz",
+          "bytes": 122143
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "4d70e32a74458543d006d9b123507bc5dceacfbf09f07afff8fa893756896d18.gz",
+          "bytes": 3665136
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13053/8474.png",
+          "file": "9817c79b228c677b02891c321ec61bdd1fdb3811d6cf6163ec257e117fa53e0c.gz",
+          "bytes": 102364
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13054/8474.png",
+          "file": "fe46778ea6cb5134f7a61724c5ed237c14e79cf4186299b33357ef341cec1831.gz",
+          "bytes": 98734
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13053/8473.png",
+          "file": "6bdbbf91def8538e52f05f300c2298226e4add6add8b951f4b599f4b1d6ca2c6.gz",
+          "bytes": 103607
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13054/8473.png",
+          "file": "a2b6563e08bccb00a8124e22f78111f373474e2a64cdaa53a4f898ffdc16f65f.gz",
+          "bytes": 100591
+        }
+      ]
+    },
+    {
+      "name": "Myeongdong, Seoul",
+      "lat": 37.5636,
+      "lon": 126.9869,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "91ad83ec25da9008affbf653534246c3d441b41b91c3395a0ba213e4597d4349.gz",
+          "bytes": 164394
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "1d0cd57fab8d75daee6d9487a613e604d888a523df593cd3a015880725218930.gz",
+          "bytes": 6836036
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13970/6344.png",
+          "file": "cd79677b7af0053a7756d65e58271f914b9d320696e32e3429606bb10f9ce91a.gz",
+          "bytes": 90372
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13971/6345.png",
+          "file": "8e6d2c86695bb70d02bc26c19b1f93a4c8cb1aaddbd30ba009fcc731ddbe9b8d.gz",
+          "bytes": 100995
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13970/6345.png",
+          "file": "c3673faed7c350eb04c7bf245082167042dbbebad071a8baeeb2ed2eedfc5a9b.gz",
+          "bytes": 92110
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13971/6344.png",
+          "file": "d44c6ef96dfec1d48bf5aa6b5d582152a8838aca330f72478c096f4852ca994b.gz",
+          "bytes": 87981
+        }
+      ]
+    },
+    {
+      "name": "Namsan Tower, Seoul",
+      "lat": 37.5512,
+      "lon": 126.9882,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "77cbbe83fa1d12c4a1c32b35603304398627049275c59c28b026a5072c42fabf.gz",
+          "bytes": 98454
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "dc9a77fb5e20774be509d6a703e3de264f085386c66b08767edb7815f2f35169.gz",
+          "bytes": 4203577
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13970/6346.png",
+          "file": "4823e23de7e4ed69c1acbd8ef458af2b53f11e62c6aaa1181fc4eec1b599e0e4.gz",
+          "bytes": 76054
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13971/6345.png",
+          "file": "8e6d2c86695bb70d02bc26c19b1f93a4c8cb1aaddbd30ba009fcc731ddbe9b8d.gz",
+          "bytes": 100995
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13970/6345.png",
+          "file": "c3673faed7c350eb04c7bf245082167042dbbebad071a8baeeb2ed2eedfc5a9b.gz",
+          "bytes": 92110
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13971/6346.png",
+          "file": "387004e1ab31de384e2d0a829c80e82e3bb851615a994ec6d857fa28d22bf3f6.gz",
+          "bytes": 85914
+        }
+      ]
+    },
+    {
+      "name": "Osaka Dotonbori",
+      "lat": 34.6687,
+      "lon": 135.5013,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "439530651cf5404135f5e34da76ec814cfa1017a5f4cb2575de19ce9f16f97cc.gz",
+          "bytes": 382796
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "29608bc02f595fca20912a7fffd7651667fbeea583b48012e63db036999b8538.gz",
+          "bytes": 10456819
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14358/6507.png",
+          "file": "e260279261eff01685d930c1784b2c95795ce3e87a38b67284bd0a761a096636.gz",
+          "bytes": 59390
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14359/6507.png",
+          "file": "d527854913096fc3e4f6488f01daa3842407a0f484fd6a80cbf26c1ab21efdef.gz",
+          "bytes": 70005
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14358/6508.png",
+          "file": "953cd7e9b38024ec0613cd77fb10ca0ea454fc60e98081a6bcd01e2731e31d03.gz",
+          "bytes": 60320
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14359/6508.png",
+          "file": "d39fc358d7432bd0953043694336d1737b84f12485bda39e24185a643d80774e.gz",
+          "bytes": 70656
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14359/6508.png",
+          "file": "eb5ff3e13c820f4e6ce875eccd6ac06fa8042777ccfc1b926fb31c9ff784f7bb.gz",
+          "bytes": 40830
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14358/6508.png",
+          "file": "81a123abbed2a0a5868a06103b889607a93b25bdf9d1521964e53155478e16d0.gz",
+          "bytes": 15835
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14358/6507.png",
+          "file": "da481d1dd28c6fced9c3d44669af081d18f7e6576dd945f533945709ddae44ea.gz",
+          "bytes": 19198
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14359/6507.png",
+          "file": "a1987f117813046e1408d941091756971ec61418b1198908ab8a4381ddb631b2.gz",
+          "bytes": 45183
+        }
+      ]
+    },
+    {
+      "name": "Red Square, Moscow",
+      "lat": 55.7539,
+      "lon": 37.6208,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "5057ea9cba2a6df2726ccea2215a0a1fb33634606cbd4ec35105535886d89f03.gz",
+          "bytes": 1504684
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "b9db47ad8a81183c11b81ffba6075092e87a03937ddf97ca362250af825fcdf5.gz",
+          "bytes": 19611433
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/9904/5122.png",
+          "file": "fa7c87927d218f22443ebf0a7d5a509ce9e5882487bb92d72b308e55f1f5a889.gz",
+          "bytes": 49941
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/9904/5121.png",
+          "file": "d523e7c8259ea9334b04a1736049890053fb7ce61369f9c699ea512232950461.gz",
+          "bytes": 52542
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/9903/5121.png",
+          "file": "8ce747641d4c1cb28e4138a6d8cb816b73e314981caaf44d7a8c465ea04f2c4f.gz",
+          "bytes": 50309
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/9903/5122.png",
+          "file": "087445ebe72151cac3fac963b2eb1da8095cf6e1a0c2b7c564e30ae0475c3f76.gz",
+          "bytes": 50743
+        }
+      ]
+    },
+    {
+      "name": "Sagrada Familia, Barcelona",
+      "lat": 41.4036,
+      "lon": 2.1744,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "076cd723302c07463c08a6ac3637f2213e5ced3c3bc03c00dbe05310949a0886.gz",
+          "bytes": 966941
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "17706ecb4862da5c7ee9bf10deac037b5072ed2e72049e11b2e58e91e3600e09.gz",
+          "bytes": 21158257
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8291/6118.png",
+          "file": "f4c1c0819f28e46f0801ec20dd284ab1997aaee8ae67c360a5be2cd2f2aa3255.gz",
+          "bytes": 83420
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8290/6118.png",
+          "file": "5134435720e2b3bca295f6efddd1d5f1165e0e9103205244ce679e29a4b7d4e3.gz",
+          "bytes": 80559
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8291/6117.png",
+          "file": "469b886349489a107741637ddf4c1acbb9f8ac1c152d1f8a14623b542f815202.gz",
+          "bytes": 87340
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/8290/6117.png",
+          "file": "479a4acf84045e6331bb005c80f197d1cc7f43d6d1d2ef46cd01b6aeaaa2046d.gz",
+          "bytes": 98500
+        }
+      ]
+    },
+    {
+      "name": "Shibuya Crossing, Tokyo",
+      "lat": 35.6595,
+      "lon": 139.7005,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "fabeb4e42b68579395e417d03aea4374b0c4ac497b3f581a3326e1a57349476c.gz",
+          "bytes": 446330
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "04dbf95ef56fbe14f32afe6b7da703045da635a06998e2059364b0dda718b781.gz",
+          "bytes": 8625478
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14549/6453.png",
+          "file": "e5478a18b2c4e314d1c5fea6537a6b3f3b93054df5dd454667a4df20801a4c8f.gz",
+          "bytes": 82715
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14550/6453.png",
+          "file": "5e8934b3e1d58a04b7fd765c989669c517ebd46398a6436ced5bb8285b0b6d96.gz",
+          "bytes": 85431
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14550/6452.png",
+          "file": "851ce0defc39ac6e4a2dc34d0af79a0e666bd56d60d8481389938d6dcbd7e0c1.gz",
+          "bytes": 81329
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/14/14549/6452.png",
+          "file": "c27046adf2f1175fe3b473a4591d6f7c57afdfed20020f3c7e466e50f2095b98.gz",
+          "bytes": 82402
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14549/6453.png",
+          "file": "e2cf352e66b72d56fdef71ede006092a3facfdb89ec99446c0c36cd703ec711b.gz",
+          "bytes": 61740
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14549/6452.png",
+          "file": "1972af856c637edf3cd507f0aa1ee0a41a21affcf4e107169cbdcb02dfc148d4.gz",
+          "bytes": 59531
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14550/6453.png",
+          "file": "dcfbf72c0a9ecb52549ec3e7a5b78df03843506223d3c2686faf868278790386.gz",
+          "bytes": 65842
+        },
+        {
+          "method": "GET",
+          "url": "https://cyberjapandata.gsi.go.jp/xyz/dem_png/14/14550/6452.png",
+          "file": "050b579f49289e258911517a6f24572b4cd938080ac0365fdf849e76f6772ae0.gz",
+          "bytes": 52860
+        }
+      ]
+    },
+    {
+      "name": "Sydney Opera House",
+      "lat": -33.8568,
+      "lon": 151.2153,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "f314c726a33a0259fafdfc5b43591dc93c5a9176ac004a988763627e55b78761.gz",
+          "bytes": 1537576
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "9053f5125b7ce4a056c85add64c751cc60f21e08efc674e0ad98db9b6cbd8a51.gz",
+          "bytes": 6341507
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/15074/9831.png",
+          "file": "c9f04b2e2e0660ccbecca81f1f66904f49e5e2c7d2955ad8a2f0866ad1f04bb2.gz",
+          "bytes": 64290
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/15073/9830.png",
+          "file": "31f1550d9d8358724cc9a5e12b1cef2549c57900d0261637e8ef5079fc9a8ed3.gz",
+          "bytes": 87667
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/15074/9830.png",
+          "file": "dbdcdac1d31c56b57f6fdc62069b9943afed1e03d29cdd933daa914e630c1430.gz",
+          "bytes": 81489
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/15073/9831.png",
+          "file": "836efc8560c5efb80767df4c4cf1eff83ea332846f93fcbd4dacc2fc7aa2121d.gz",
+          "bytes": 87628
+        }
+      ]
+    },
+    {
+      "name": "Times Square, New York",
+      "lat": 40.758,
+      "lon": -73.9855,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "fcf71cb8be365340b36c8a6c7d550da6ba1bf1915c67735abbd4c8b8e1ada686.gz",
+          "bytes": 365961
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "d3f06ca1f256bb7c97c3305a46b0bf26056ac6c852b27808d0e6d2b7a19f35e0.gz",
+          "bytes": 11805103
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/4824/6157.png",
+          "file": "f3c9cfcb8c74368be185fabfab168e359409d4249c2c98151b1fab2a2fd7fe60.gz",
+          "bytes": 70521
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/4825/6157.png",
+          "file": "1ddca03e898ee3e3dc6fa5dd4189dd8a8e330b48f9801de8fd108aca5fef5dc5.gz",
+          "bytes": 72639
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/4824/6156.png",
+          "file": "6546d6f1c44f596698f292f3b61d923bea0ff43663ff161756e9c6d8cd26db5e.gz",
+          "bytes": 63746
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/4825/6156.png",
+          "file": "cd32bd6cc754ecd32bb6de3003b19f3acc9e4f9cb5beb92e4b36ef519c385a4d.gz",
+          "bytes": 81442
+        }
+      ]
+    },
+    {
+      "name": "Victoria Harbour, Tsim Sha Tsui, Hong Kong",
+      "lat": 22.295,
+      "lon": 114.17,
+      "size": 300,
+      "far": 2000,
+      "recorded": "2026-10-22",
+      "files": [
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "5a74e8db2a21859f1d1b034a8f136a973fbcc569c8c9b4bc6b2765410f63cecf.gz",
+          "bytes": 379165
+        },
+        {
+          "method": "POST",
+          "url": "https://overpass.openstreetmap.fr/api/interpreter",
+          "file": "580b5e4b4d6f30533e48663025467ec381dccd484eea72907c5425cefe854d23.gz",
+          "bytes": 3697785
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13387/7150.png",
+          "file": "cef6f9f44bad10e83ff975a62e8eef1ace2cf00b02efaaa2bfeccbd218127060.gz",
+          "bytes": 61285
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13387/7151.png",
+          "file": "b0b585d43fc9516071d71715d94f14b3b9ca63a36e429194ef6a896777d6489b.gz",
+          "bytes": 112871
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13388/7151.png",
+          "file": "f43d58afd350eb7af0422e7b4e304877746b2c8b4f23001be8e4af17bad569e7.gz",
+          "bytes": 102277
+        },
+        {
+          "method": "GET",
+          "url": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/14/13388/7150.png",
+          "file": "7f2e3931e57fac3faf3bb737bd59c7a20365d635179014644dbb916fb30f6f3f.gz",
+          "bytes": 87786
+        }
+      ]
+    }
+  ]
+}

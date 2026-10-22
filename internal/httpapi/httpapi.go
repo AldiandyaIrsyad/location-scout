@@ -25,6 +25,7 @@ import (
 	"panelscape/internal/elevation"
 	"panelscape/internal/osm"
 	"panelscape/internal/places"
+	"panelscape/internal/snapshot"
 )
 
 // About describes the running server (GET /api/about).
@@ -329,6 +330,12 @@ func (h *apiHandlers) cacheStats(w http.ResponseWriter, r *http.Request) {
 func (h *apiHandlers) upstreamFailed(w http.ResponseWriter, r *http.Request, what string, err error) {
 	if err == nil {
 		err = errors.New("empty result")
+	}
+	// Live data is switched off and this area was never recorded: say so, it is not an outage.
+	if errors.Is(err, snapshot.ErrNotSnapshotted) {
+		h.logger.InfoContext(r.Context(), "area not in the bundled snapshot", "what", what)
+		writeError(w, http.StatusNotFound, "no bundled data for this area, and live data is turned off")
+		return
 	}
 	h.logger.WarnContext(r.Context(), "upstream failed", "what", what, "err", err)
 	writeError(w, http.StatusBadGateway, "could not load "+what+": upstream request failed")

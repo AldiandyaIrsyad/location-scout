@@ -26,6 +26,8 @@ type Config struct {
 	ResultTTL           time.Duration // cache time for computed results: parsed cities, grids (env RESULT_TTL)
 	UpstreamTimeout     time.Duration // per-request timeout for upstream calls (env UPSTREAM_TIMEOUT)
 	SurroundingsTimeout time.Duration // per-request timeout for the large surroundings query (env SURROUNDINGS_TIMEOUT)
+	SnapshotDir         string        // directory of recorded upstream responses for the built-in places (env SNAPSHOT_DIR)
+	SnapshotMode        string        // prefer (snapshot first, then live), only (never live) or off (env SNAPSHOT_MODE)
 }
 
 // Load reads the environment and applies defaults.
@@ -48,6 +50,8 @@ func Load() Config {
 		ResultTTL:           envDuration("RESULT_TTL", 24*time.Hour),
 		UpstreamTimeout:     envDuration("UPSTREAM_TIMEOUT", 20*time.Second),
 		SurroundingsTimeout: envDuration("SURROUNDINGS_TIMEOUT", 45*time.Second),
+		SnapshotDir:         env("SNAPSHOT_DIR", "snapshots"),
+		SnapshotMode:        env("SNAPSHOT_MODE", "prefer"),
 	}
 	if c.Addr == "" {
 		c.Addr = ":" + env("PORT", "8080")

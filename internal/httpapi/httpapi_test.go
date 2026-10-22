@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"mime/multipart"
@@ -21,6 +22,7 @@ import (
 	"panelscape/internal/httpapi"
 	"panelscape/internal/osm"
 	"panelscape/internal/places"
+	"panelscape/internal/snapshot"
 )
 
 // ---------------------------------------------------------------------------
@@ -282,6 +284,20 @@ func TestUpstreamFailureIs502WithoutDetail(t *testing.T) {
 	if msg := errorText(t, rec); strings.Contains(msg, "secret-host") {
 		t.Fatalf("upstream detail leaked to client: %q", msg)
 	}
+}
+
+// In snapshot-only mode an unrecorded area is a clear 404 for the client, not a generic upstream failure; the
+// message must not talk about an outage, and ordinary upstream errors keep their 502.
+func TestAreaOutsideTheSnapshotIs404(t *testing.T) {
+	hn := newHarness(t)
+	hn.city.err = fmt.Errorf("osm: overpass https://x/api: %w", snapshot.ErrNotSnapshotted)
+	rec := hn.get("/api/city?lat=1&lon=2&size=300")
+	expectStatus(t, rec, http.StatusNotFound)
+	if msg := errorText(t, rec); !strings.Contains(msg, "no bundled data") || strings.Contains(msg, "https://x") {
+		t.Fatalf("message = %q", msg)
+	}
+	hn.city.err = errors.New("overpass unreachable")
+	expectStatus(t, hn.get("/api/city?lat=1&lon=2&size=300"), http.StatusBadGateway)
 }
 
 func TestETagNotModified(t *testing.T) {

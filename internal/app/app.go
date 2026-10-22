@@ -18,6 +18,7 @@ import (
 	"panelscape/internal/httpapi"
 	"panelscape/internal/osm"
 	"panelscape/internal/places"
+	"panelscape/internal/snapshot"
 	"panelscape/internal/upstream"
 	"panelscape/web"
 )
@@ -71,7 +72,18 @@ func New(cfg config.Config, logger *slog.Logger) (*App, error) {
 	// The client's limit is the longest any request may take; the city and surroundings queries
 	// get their own (shorter or equal) limits below.
 	client := &http.Client{Timeout: max(cfg.UpstreamTimeout, cfg.SurroundingsTimeout)}
-	fetcher := upstream.NewHTTPFetcher(client, c, cfg.UserAgent, logger)
+	live := upstream.NewHTTPFetcher(client, c, cfg.UserAgent, logger)
+	// Recorded responses for the built-in places come first; everything else goes live (unless SNAPSHOT_MODE says otherwise).
+	mode, err := snapshot.ParseMode(cfg.SnapshotMode)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	snapshots := snapshot.NewDir(cfg.SnapshotDir)
+	if mode != snapshot.ModeOff && !snapshots.Exists() {
+		logger.Warn("snapshot directory not found; every request goes live", "dir", cfg.SnapshotDir, "mode", mode)
+	}
+	fetcher := snapshot.NewFetcher(live, snapshots, mode)
 
 	cityService := osm.NewService(fetcher, cfg.OverpassURLs, cfg.OSMTTL, c, cfg.ResultTTL, logger)
 	cityService.CityTimeout = cfg.UpstreamTimeout
@@ -102,7 +114,7 @@ func New(cfg config.Config, logger *slog.Logger) (*App, error) {
 	})
 
 	logger.Info("cache configured",
-		"memory_mb", cfg.MemoryCacheMB, "cache_dir", cfg.CacheDir,
+		"memory_mb", cfg.MemoryCacheMB, "cache_dir", cfg.CacheDir, "snapshot_dir", cfg.SnapshotDir, "snapshot_mode", mode,
 		"overpass", len(cfg.OverpassURLs), "static_dir", cfg.StaticDir)
 	return a, nil
 }
